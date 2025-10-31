@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# 예: 50자 이상이면 경고 정도로만 (원하면 커밋lint 도입 가능)
+msg_file=$1
+msg_len=$(wc -m < "$msg_file")
+if [ "$msg_len" -gt 300 ]; then
+  echo "⚠️  커밋 메시지가 너무 깁니다 ($msg_len). 300자 이내 권장."
+fi
