@@ -1,0 +1,683 @@
+"use client"
+
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Server, CheckCircle2, Clock, AlertCircle, ChevronDown, Package, Users, Shield } from "lucide-react"
+import { useState, useEffect } from "react"
+
+export default function MyPage() {
+  const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set())
+  const [userRole, setUserRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    const role = localStorage.getItem("userRole")
+    setUserRole(role)
+  }, [])
+
+  const toggleServerDetails = (serverId: number) => {
+    const newExpanded = new Set(expandedServers)
+    if (newExpanded.has(serverId)) {
+      newExpanded.delete(serverId)
+    } else {
+      newExpanded.add(serverId)
+    }
+    setExpandedServers(newExpanded)
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "running":
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />
+      case "stopped":
+        return <AlertCircle className="h-5 w-5 text-gray-400" />
+      case "pending":
+        return <Clock className="h-5 w-5 text-yellow-500" />
+      default:
+        return null
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "running":
+        return "실행 중"
+      case "stopped":
+        return "중지됨"
+      case "pending":
+        return "대기 중"
+      default:
+        return status
+    }
+  }
+
+  if (userRole === "team-leader") {
+    return (
+      <TeamLeaderMyPageContent
+        expandedServers={expandedServers}
+        toggleServerDetails={toggleServerDetails}
+        getStatusIcon={getStatusIcon}
+        getStatusText={getStatusText}
+      />
+    )
+  }
+
+  if (userRole === "manager") {
+    return (
+      <ManagerMyPageContent
+        expandedServers={expandedServers}
+        toggleServerDetails={toggleServerDetails}
+        getStatusIcon={getStatusIcon}
+        getStatusText={getStatusText}
+      />
+    )
+  }
+
+  // Default: Employee/Team Member view
+  const userInfo = {
+    name: "홍길동",
+    employeeId: "EMP-2024-001",
+    department: "개발팀",
+  }
+
+  const vmList = [
+    {
+      id: 1,
+      name: "web-server-01",
+      type: "퍼블릭",
+      status: "running",
+      cpu: "2 vCPU",
+      memory: "4GB",
+      storage: "50GB",
+      os: "Ubuntu 22.04",
+      createdAt: "2024-01-15",
+      ipAddress: "192.168.1.10",
+      packages: ["nginx", "nodejs", "pm2"],
+      lastUpdated: "2024-01-20 14:30",
+    },
+    {
+      id: 2,
+      name: "db-server-01",
+      type: "프라이빗",
+      status: "running",
+      cpu: "4 vCPU",
+      memory: "8GB",
+      storage: "100GB",
+      os: "CentOS 8",
+      createdAt: "2024-01-10",
+      ipAddress: "10.0.1.20",
+      packages: ["postgresql", "redis"],
+      lastUpdated: "2024-01-19 10:15",
+    },
+    {
+      id: 3,
+      name: "test-server-02",
+      type: "퍼블릭",
+      status: "stopped",
+      cpu: "1 vCPU",
+      memory: "2GB",
+      storage: "30GB",
+      os: "Ubuntu 20.04",
+      createdAt: "2024-01-05",
+      ipAddress: "192.168.1.15",
+      packages: ["git", "jenkins"],
+      lastUpdated: "2024-01-18 11:20",
+    },
+  ]
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <Header />
+
+      <main className="flex-1 bg-background">
+        <div className="container px-4 py-8 md:px-6">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold tracking-tight">마이페이지</h1>
+            <p className="mt-2 text-muted-foreground">내 정보와 생성한 가상머신을 관리하세요</p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <Card className="p-6">
+                <h2 className="text-lg font-semibold mb-4">사용자 정보</h2>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">이름</p>
+                    <p className="font-medium">{userInfo.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">사번</p>
+                    <p className="font-medium">{userInfo.employeeId}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">부서</p>
+                    <p className="font-medium">{userInfo.department}</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            <div className="lg:col-span-2">
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold">내 가상머신</h2>
+                  <Button onClick={() => (window.location.href = "/create-vm")}>새 VM 생성</Button>
+                </div>
+
+                <div className="space-y-4">
+                  {vmList.map((vm) => (
+                    <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
+                      <div
+                        className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => toggleServerDetails(vm.id)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="rounded-md bg-primary/10 p-2">
+                              <Server className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold">{vm.name}</h3>
+                                <span className="text-xs px-2 py-1 rounded-full bg-muted">{vm.type}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                <div>CPU: {vm.cpu}</div>
+                                <div>메모리: {vm.memory}</div>
+                                <div>스토리지: {vm.storage}</div>
+                                <div>OS: {vm.os}</div>
+                              </div>
+                              <p className="text-xs text-muted-foreground">생성일: {vm.createdAt}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(vm.status)}
+                            <span className="text-sm font-medium">{getStatusText(vm.status)}</span>
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${
+                                expandedServers.has(vm.id) ? "rotate-180" : ""
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {expandedServers.has(vm.id) && (
+                        <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
+                          <h5 className="font-semibold mb-3 flex items-center gap-2">
+                            <Package className="h-4 w-4" />
+                            상세 정보
+                          </h5>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-muted-foreground mb-1">IP 주소</p>
+                              <p className="font-medium">{vm.ipAddress}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-1">마지막 업데이트</p>
+                              <p className="font-medium">{vm.lastUpdated}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <p className="text-muted-foreground mb-2">설치된 패키지</p>
+                              <div className="flex flex-wrap gap-2">
+                                {vm.packages.map((pkg, idx) => (
+                                  <Badge key={idx} variant="secondary" className="text-xs">
+                                    {pkg}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
+}
+
+function TeamLeaderMyPageContent({ expandedServers, toggleServerDetails, getStatusIcon, getStatusText }: any) {
+  const teamLeaderInfo = {
+    name: "이팀장",
+    employeeId: "TL-2024-001",
+    department: "개발본부",
+    team: "A팀",
+    role: "팀장",
+  }
+
+  const teamMembers = [
+    {
+      teamMember: "홍길동 (EMP-2024-001)",
+      servers: [
+        {
+          id: 1,
+          name: "web-server-01",
+          type: "퍼블릭",
+          status: "running",
+          cpu: "2 vCPU",
+          memory: "4GB",
+          storage: "50GB",
+          os: "Ubuntu 22.04",
+          createdAt: "2024-01-15",
+          ipAddress: "192.168.1.10",
+          packages: ["nginx", "nodejs", "pm2"],
+          lastUpdated: "2024-01-20 14:30",
+        },
+        {
+          id: 2,
+          name: "db-server-01",
+          type: "프라이빗",
+          status: "running",
+          cpu: "4 vCPU",
+          memory: "8GB",
+          storage: "100GB",
+          os: "CentOS 8",
+          createdAt: "2024-01-10",
+          ipAddress: "10.0.1.20",
+          packages: ["postgresql", "redis"],
+          lastUpdated: "2024-01-19 10:15",
+        },
+      ],
+    },
+  ]
+
+  const totalServers = teamMembers.reduce((acc, member) => acc + member.servers.length, 0)
+  const runningServers = teamMembers.reduce(
+    (acc, member) => acc + member.servers.filter((s) => s.status === "running").length,
+    0,
+  )
+
+  return (
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+      <Header />
+
+      <main className="flex-1">
+        <div className="container px-4 py-8 md:px-6">
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="rounded-xl bg-primary/10 p-3">
+                <Users className="h-8 w-8 text-primary" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight">마이페이지</h1>
+            </div>
+            <p className="text-muted-foreground">{teamLeaderInfo.team} 팀원들의 가상머신을 관리하세요</p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-4 mb-6">
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                팀장 정보
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">이름</p>
+                  <p className="font-medium">{teamLeaderInfo.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">사번</p>
+                  <p className="font-medium">{teamLeaderInfo.employeeId}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">팀</p>
+                  <Badge variant="default">{teamLeaderInfo.team}</Badge>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="rounded-lg bg-blue-100 p-2">
+                  <Server className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">팀 전체 서버</p>
+                  <p className="text-2xl font-bold">{totalServers}</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="rounded-lg bg-green-100 p-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">실행 중</p>
+                  <p className="text-2xl font-bold">{runningServers}</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="rounded-lg bg-purple-100 p-2">
+                  <Users className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">팀원</p>
+                  <p className="text-2xl font-bold">{teamMembers.length}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            {teamMembers.map((member, memberIndex) => (
+              <Card key={memberIndex} className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    {member.teamMember}
+                  </h2>
+                  <Badge variant="outline">{member.servers.length}개 서버</Badge>
+                </div>
+
+                <div className="space-y-4">
+                  {member.servers.map((vm) => (
+                    <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
+                      <div
+                        className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => toggleServerDetails(vm.id)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="rounded-md bg-primary/10 p-2">
+                              <Server className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold">{vm.name}</h3>
+                                <span className="text-xs px-2 py-1 rounded-full bg-muted">{vm.type}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                <div>CPU: {vm.cpu}</div>
+                                <div>메모리: {vm.memory}</div>
+                                <div>스토리지: {vm.storage}</div>
+                                <div>OS: {vm.os}</div>
+                              </div>
+                              <p className="text-xs text-muted-foreground">생성일: {vm.createdAt}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(vm.status)}
+                            <span className="text-sm font-medium">{getStatusText(vm.status)}</span>
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${
+                                expandedServers.has(vm.id) ? "rotate-180" : ""
+                              }`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {expandedServers.has(vm.id) && (
+                        <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
+                          <h5 className="font-semibold mb-3 flex items-center gap-2">
+                            <Package className="h-4 w-4" />
+                            상세 정보
+                          </h5>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-muted-foreground mb-1">IP 주소</p>
+                              <p className="font-medium">{vm.ipAddress}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-1">마지막 업데이트</p>
+                              <p className="font-medium">{vm.lastUpdated}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <p className="text-muted-foreground mb-2">설치된 패키지</p>
+                              <div className="flex flex-wrap gap-2">
+                                {vm.packages.map((pkg, idx) => (
+                                  <Badge key={idx} variant="secondary" className="text-xs">
+                                    {pkg}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
+}
+
+function ManagerMyPageContent({ expandedServers, toggleServerDetails, getStatusIcon, getStatusText }: any) {
+  const managerInfo = {
+    name: "김부장",
+    employeeId: "MGR-2024-001",
+    department: "개발본부",
+    role: "부장",
+  }
+
+  const allTeamsServers = [
+    {
+      teamName: "A팀",
+      teamLeader: "이팀장 (TL-2024-001)",
+      members: [
+        {
+          teamMember: "홍길동 (EMP-2024-001)",
+          servers: [
+            {
+              id: 1,
+              name: "web-server-01",
+              type: "퍼블릭",
+              status: "running",
+              cpu: "2 vCPU",
+              memory: "4GB",
+              storage: "50GB",
+              os: "Ubuntu 22.04",
+              createdAt: "2024-01-15",
+              ipAddress: "192.168.1.10",
+              packages: ["nginx", "nodejs", "pm2"],
+              lastUpdated: "2024-01-20 14:30",
+            },
+          ],
+        },
+      ],
+    },
+  ]
+
+  const totalServers = allTeamsServers.reduce(
+    (acc, team) => acc + team.members.reduce((sum, member) => sum + member.servers.length, 0),
+    0,
+  )
+  const runningServers = allTeamsServers.reduce(
+    (acc, team) =>
+      acc + team.members.reduce((sum, member) => sum + member.servers.filter((s) => s.status === "running").length, 0),
+    0,
+  )
+  const totalMembers = allTeamsServers.reduce((acc, team) => acc + team.members.length, 0)
+
+  return (
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+      <Header />
+
+      <main className="flex-1">
+        <div className="container px-4 py-8 md:px-6">
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="rounded-xl bg-primary/10 p-3">
+                <Shield className="h-8 w-8 text-primary" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight">마이페이지</h1>
+            </div>
+            <p className="text-muted-foreground">모든 팀의 가상머신을 관리하고 패키지 승인을 처리하세요</p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-4 mb-6">
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                관리자 정보
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">이름</p>
+                  <p className="font-medium">{managerInfo.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">사번</p>
+                  <p className="font-medium">{managerInfo.employeeId}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">부서</p>
+                  <p className="font-medium">{managerInfo.department}</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="rounded-lg bg-blue-100 p-2">
+                  <Server className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">전체 서버</p>
+                  <p className="text-2xl font-bold">{totalServers}</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="rounded-lg bg-green-100 p-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">실행 중</p>
+                  <p className="text-2xl font-bold">{runningServers}</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="rounded-lg bg-purple-100 p-2">
+                  <Users className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">전체 팀원</p>
+                  <p className="text-2xl font-bold">{totalMembers}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            {allTeamsServers.map((team, teamIndex) => (
+              <Card key={teamIndex} className="p-6">
+                <h2 className="text-lg font-semibold mb-4">{team.teamName}</h2>
+                <p className="text-sm text-muted-foreground mb-4">팀장: {team.teamLeader}</p>
+
+                <div className="space-y-6">
+                  {team.members.map((member, memberIndex) => (
+                    <div key={memberIndex}>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        {member.teamMember}
+                      </h3>
+
+                      <div className="space-y-3">
+                        {member.servers.map((vm) => (
+                          <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
+                            <div
+                              className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                              onClick={() => toggleServerDetails(vm.id)}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-start gap-3 flex-1">
+                                  <div className="rounded-md bg-primary/10 p-2">
+                                    <Server className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-semibold">{vm.name}</h4>
+                                      <span className="text-xs px-2 py-1 rounded-full bg-muted">{vm.type}</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                      <div>CPU: {vm.cpu}</div>
+                                      <div>메모리: {vm.memory}</div>
+                                      <div>스토리지: {vm.storage}</div>
+                                      <div>OS: {vm.os}</div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">생성일: {vm.createdAt}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {getStatusIcon(vm.status)}
+                                  <span className="text-sm font-medium">{getStatusText(vm.status)}</span>
+                                  <ChevronDown
+                                    className={`h-4 w-4 transition-transform ${
+                                      expandedServers.has(vm.id) ? "rotate-180" : ""
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {expandedServers.has(vm.id) && (
+                              <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
+                                <h5 className="font-semibold mb-3 flex items-center gap-2">
+                                  <Package className="h-4 w-4" />
+                                  상세 정보
+                                </h5>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">IP 주소</p>
+                                    <p className="font-medium">{vm.ipAddress}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">마지막 업데이트</p>
+                                    <p className="font-medium">{vm.lastUpdated}</p>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <p className="text-muted-foreground mb-2">설치된 패키지</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {vm.packages.map((pkg, idx) => (
+                                        <Badge key={idx} variant="secondary" className="text-xs">
+                                          {pkg}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  )
+}
