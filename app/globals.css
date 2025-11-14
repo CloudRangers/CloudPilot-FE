@@ -1,8 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 :root {
   /* Updated theme for Cloud Pilot - professional white theme with blue accent */
   --background: oklch(0.99 0 0);
