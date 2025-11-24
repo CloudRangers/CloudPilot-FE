@@ -2,37 +2,37 @@ pipeline {
     agent any
 
     environment {
-        // 🔹 여기 버킷 이름만 네 S3 버킷으로 변경
+        // 🔹 네 S3 버킷 이름으로 변경
         S3_BUCKET = 'cloudpilot-fe'
         AWS_REGION = 'ap-northeast-2'
     }
 
     stages {
+
         stage('Checkout') {
             steps {
-                // Jenkins job에서 설정한 SCM 정보를 그대로 사용
                 checkout scm
             }
         }
 
         stage('Node version check') {
             steps {
-                sh 'node -v || echo "node not found"'
-                sh 'npm -v || echo "npm not found"'
+                sh 'node -v'
+                sh 'npm -v'
             }
         }
 
         stage('Install dependencies') {
             steps {
                 sh '''
-                # package-lock 삭제
-                rm -f package-lock.json
-                # optional dependency (플랫폼 전용 패키지)들은 설치 안 함
-                npm install --force
+                  # 윈도우에서 만든 lock 파일은 Jenkins(Linux)에서 문제 될 수 있으니 삭제
+                  rm -f package-lock.json
+
+                  # 플랫폼 체크로 인한 에러를 피하기 위해 강제 설치
+                  npm install --force
                 '''
             }
         }
-
 
         stage('Build') {
             steps {
@@ -42,16 +42,13 @@ pipeline {
 
         stage('Deploy to S3') {
             steps {
-                // 🔹 AWS Credentials 타입용 바인딩
+                // 🔹 Credentials 타입: "AWS Credentials" 에 맞는 바인딩
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                    # AWS Credentials 플러그인이 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN 을 알아서 넣어줌
-                    aws s3 sync out/ s3://$S3_BUCKET/ --delete
+                      aws s3 sync out/ s3://$S3_BUCKET/ --delete
                     '''
                 }
             }
-        }
-
         }
     }
 
