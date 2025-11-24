@@ -42,21 +42,16 @@ pipeline {
 
         stage('Deploy to S3') {
             steps {
-                // 🔹 Jenkins Credentials 의 ID: aws-credentials 사용
-                withCredentials([usernamePassword(
-                    credentialsId: 'aws-credentials',
-                    usernameVariable: 'AWS_ACCESS_KEY_ID',
-                    passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                )]) {
+                // 🔹 AWS Credentials 타입용 바인딩
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     sh '''
-                      export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                      export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                      export AWS_DEFAULT_REGION=$AWS_REGION
-
-                      aws s3 sync out/ s3://$S3_BUCKET/ --delete
+                    # AWS Credentials 플러그인이 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN 을 알아서 넣어줌
+                    aws s3 sync out/ s3://$S3_BUCKET/ --delete
                     '''
                 }
             }
+        }
+
         }
     }
 
