@@ -28,7 +28,7 @@ pipeline {
                 # package-lock 삭제
                 rm -f package-lock.json
                 # optional dependency (플랫폼 전용 패키지)들은 설치 안 함
-                npm ci --omit=optional || npm install --omit=optional
+                npm install --force
                 '''
             }
         }
