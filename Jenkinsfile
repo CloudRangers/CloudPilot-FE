@@ -24,10 +24,13 @@ pipeline {
 
         stage('Install dependencies') {
             steps {
-                // package-lock 있으면 ci, 없으면 install
-                sh 'npm ci || npm install'
+                sh '''
+                # optional dependency (플랫폼 전용 패키지)들은 설치 안 함
+                npm ci --omit=optional || npm install --omit=optional
+                '''
             }
         }
+
 
         stage('Build') {
             steps {
