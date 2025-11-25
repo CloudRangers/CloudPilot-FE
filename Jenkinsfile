@@ -2,97 +2,100 @@ pipeline {
     agent any
 
     environment {
-        // 🔁 FE 브랜치 (필요하면 develop 등으로 변경)
-        GIT_BRANCH = 'feat/#28'
+        // ── 기본 환경 설정 ──
+        NODE_ENV  = 'production'
 
-        // 🔁 FE 배포 대상 서버
-        EC2_HOST   = 'ubuntu@10.0.0.244'
+        // ── EC2 접속 정보 (필수 수정) ──
+        EC2_USER  = 'ubuntu'                  // EC2 리눅스 사용자
+        EC2_HOST  = '10.0.0.244'         // 🔧 여기 EC2 공인 IP 또는 도메인
+        APP_DIR   = '/home/ubuntu/cloudpilot-fe' // 🔧 EC2 안에서 FE가 있을 디렉터리
+
+        // ── 배포할 브랜치 (필수 수정) ──
+        GIT_BRANCH = 'feat/#28'               // 🔧 Jenkins Job이 보고 있는 브랜치
+    }
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timestamps()
     }
 
     stages {
 
         stage('Checkout') {
             steps {
+                // 멀티브랜치면 checkout scm 써도 되고,
+                // 일반 Pipeline Job이면 브랜치/URL 지정해도 됨.
                 checkout scm
             }
         }
 
         stage('Node version check (Jenkins)') {
             steps {
-                sh 'node -v'
-                sh 'npm -v'
+                sh '''
+                  echo "== Node / npm version =="
+                  node -v
+                  npm  -v
+                '''
             }
         }
 
         stage('Install & Build (Jenkins)') {
             steps {
                 sh '''
-                    rm -f package-lock.json
-                    npm install --force
-                    npm run build
+                  echo "== NPM install & build on Jenkins =="
+                  rm -f package-lock.json
+                  npm install --force
+                  npm run build
                 '''
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                // 🔑 Backend에서 성공적으로 동작한 Credential
-                sshagent(['was-deploy-key']) {
+                // Jenkins에 미리 만들어 둔 SSH 크리덴셜 ID 사용 (로그에 있는 'ubuntu')
+                sshagent(credentials: ['ubuntu']) {
+                    // ⚠ 여기서는 Groovy 변수를 안 쓰고, 전부 쉘에서 $EC2_HOST 식으로만 씀
+                    sh '''
+                      echo "== Deploy to EC2 =="
+                      ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" '
+                        set -e
 
-                    sh """
-ssh -o StrictHostKeyChecking=no ${EC2_HOST} << 'EOF'
-set -e
+                        echo "[EC2] APP_DIR: $APP_DIR"
+                        echo "[EC2] GIT_BRANCH: $GIT_BRANCH"
 
-APP_DIR=/home/ubuntu/cloudpilot-fe
+                        # 프로젝트 디렉터리 없으면 처음 한 번만 clone
+                        if [ ! -d "$APP_DIR" ]; then
+                          echo "[EC2] Cloning repo..."
+                          git clone https://github.com/CloudRangers/CloudPilot-FE.git "$APP_DIR"
+                        fi
 
-echo "📌 EC2 Node 환경 점검 및 자동 설치"
-if ! command -v node >/dev/null 2>&1; then
-  echo "➡ Node.js 설치"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt-get install -y nodejs
-fi
+                        cd "$APP_DIR"
 
-if ! command -v pm2 >/dev/null 2>&1; then
-  echo "➡ PM2 글로벌 설치"
-  sudo npm install -g pm2
-fi
+                        echo "[EC2] Fetch & checkout branch"
+                        git fetch --all
+                        git checkout "$GIT_BRANCH"
+                        git pull origin "$GIT_BRANCH"
 
-echo "📌 배포 디렉토리 생성"
-mkdir -p "$APP_DIR"
-cd "$APP_DIR"
+                        echo "[EC2] npm install & build on EC2"
+                        npm install --force
+                        npm run build
 
-echo "📌 Git Pull / Clone 시작"
+                        echo "[EC2] Restart app with pm2"
+                        # pm2 이름은 원하면 바꿔도 됨
+                        pm2 restart cloudpilot-fe || pm2 start npm --name cloudpilot-fe -- start
 
-if [ ! -d .git ]; then
-  git clone -b ${GIT_BRANCH} https://github.com/CloudRangers/CloudPilot-FE.git .
-else
-  git fetch origin ${GIT_BRANCH}
-  git checkout ${GIT_BRANCH}
-  git pull origin ${GIT_BRANCH}
-fi
-
-echo "📌 npm install & build 시작"
-rm -f package-lock.json
-npm install --force
-npm run build
-
-echo "📌 PM2 재시작 또는 신규 실행"
-pm2 describe cloudpilot-fe >/dev/null 2>&1 && \
-  pm2 restart cloudpilot-fe || \
-  pm2 start npm --name cloudpilot-fe -- start
-
-echo "🎉 FE 배포 완료!"
-EOF
-                    """
+                        echo "[EC2] Deploy finished"
+                      '
+                    '''
                 }
             }
         }
-
     }
 
     post {
         success {
-            echo '✅ FE build + EC2 배포 성공 (Next.js 서버모드 PM2)'
+            echo '✅ FE 배포 성공!'
         }
         failure {
             echo '🚨 FE 배포 실패 — Jenkins 콘솔 로그 확인 필요'
