@@ -1,7 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 🔹 정적 export 모드 (S3에 올릴 수 있는 순수 HTML/JS/CSS 생성)
-  output: "export",
 
   typescript: {
     ignoreBuildErrors: true,
