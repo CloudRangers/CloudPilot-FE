@@ -36,9 +36,8 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                // 🔑 Backend에서 성공적으로 동작한 Credential
+                // 🔑 Backend에서 쓰던 SSH 키 (jenkins-deploy)
                 sshagent(['was-deploy-key']) {
-
                     sh """
 ssh -o StrictHostKeyChecking=no ${EC2_HOST} << 'EOF'
 set -e
@@ -58,8 +57,8 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 
 echo "📌 배포 디렉토리 생성"
-mkdir -p "$APP_DIR"
-cd "$APP_DIR"
+mkdir -p "\$APP_DIR"
+cd "\$APP_DIR"
 
 echo "📌 Git Pull / Clone 시작"
 
@@ -83,7 +82,7 @@ pm2 describe cloudpilot-fe >/dev/null 2>&1 && \
 
 echo "🎉 FE 배포 완료!"
 EOF
-                    """
+"""
                 }
             }
         }
