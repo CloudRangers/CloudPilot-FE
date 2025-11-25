@@ -27,9 +27,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isLoggingOut, setIsLoggingOut] = useState(false); // ⭐ 추가됨
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // 초기 로그인 상태 확인
+  // ★ 초기 로그인 상태 확인 (Race Condition 방어)
   useEffect(() => {
     (async () => {
       try {
@@ -39,7 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const raw = await res.text();
         if (!raw) {
-          setUser(null);
+          // ❗ 이미 로그인 상태가 설정되어 있으면 유지
+          setUser((prev) => prev);
           setLoading(false);
           return;
         }
@@ -47,12 +48,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const json = JSON.parse(raw);
 
         if (json.success && json.data) {
-          setUser(json.data);
+          // ❗ 기존 user가 있다면 덮어쓰지 않음
+          setUser((prev) => prev ?? json.data);
         } else {
-          setUser(null);
+          // ❗ null로 덮어쓰지 않음
+          setUser((prev) => prev);
         }
       } catch {
-        setUser(null);
+        // ❗ 에러여도 기존 상태 유지
+        setUser((prev) => prev);
       }
 
       setLoading(false);

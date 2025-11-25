@@ -58,22 +58,31 @@ export function Header() {
 
   // ⭐ 로그아웃
   const logout = async () => {
-    try {
-      setIsLoggingOut(true); // ⭐ 관리자 페이지 리다이렉트 방지
+  try {
+    setIsLoggingOut(true);
 
-      await fetch("/api/backend/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUser(null);
+    const res = await fetch("/api/backend/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
 
-      // ⭐ 무조건 홈으로 이동
-      router.push("/");
+    if (!res.ok) {
+      console.warn("❗ 백엔드 로그아웃 요청 실패");
     }
-  };
+  } catch (err) {
+    console.error("[LOGOUT ERROR]", err);
+  } finally {
+    // 🔥 모든 클라이언트 캐시 삭제 (가장 안전)
+    localStorage.clear();
+
+    // 상태 초기화
+    setUser(null);
+
+    // 홈으로 이동
+    router.push("/");
+  }
+};
+
 
   // 알림 로드
   useEffect(() => {
