@@ -7,6 +7,10 @@ pipeline {
 
         // 🔁 FE 배포 대상 서버
         EC2_HOST   = 'ubuntu@10.0.0.244'
+        AWS_DEFAULT_REGION = "ap-northeast-2"
+        ECR_ID = "291418340911"               // AWS 계정 ID
+        ECR_REPO = "cloudpilot/frontend"      // FE용 ECR repo 
+        IMAGE_TAG = "latest"
     }
 
     stages {
@@ -34,6 +38,26 @@ pipeline {
             }
         }
 
+        stage('Push to ECR') {
+            steps {
+                script {
+                    sh """
+                        echo "🔐 Logging in to ECR..."
+                        aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
+                            | docker login --username AWS --password-stdin ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+
+                        echo "🐳 Building FE Docker Image..."
+                        docker build -t cloudpilot/frontend:latest .
+
+                        echo "🏷 Tagging Image..."
+                        docker tag cloudpilot/frontend:latest ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+
+                        echo "🚀 Pushing to ECR..."
+                        docker push ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
         
     }
 }
