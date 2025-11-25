@@ -7,7 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InfraFlowAnimation } from "@/components/infra-flow-animation";
-import { useUser } from "@/app/providers/AuthProvider"; // ⭐️ AuthProvider 훅
+import { useUser } from "@/app/providers/AuthProvider";
+
+// API 응답 구조
+interface LoginApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string | null;
+}
+
+interface LoginResponseDto {
+  username: string;
+  roleCode: string;
+  roleName: string;
+  teamName: string;
+}
 
 export default function LoginPage() {
   const [isPasswordReset, setIsPasswordReset] = useState(false);
@@ -18,7 +32,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
-  const { setUser } = useUser(); // ⭐️ 전역 user 변경 훅
+  const { setUser } = useUser();
 
   // ---------------------------
   // 🔥 로그인 실행
@@ -35,8 +49,8 @@ export default function LoginPage() {
         credentials: "include",
         body: JSON.stringify({
           empno: parseInt(employeeId, 10),
-          password: password
-        })
+          password: password,
+        }),
       });
 
       const result = await res.json();
@@ -51,7 +65,7 @@ export default function LoginPage() {
 
       // 2) 로그인 후 사용자 정보 요청
       const meRes = await fetch("/api/backend/auth/me", {
-        credentials: "include"
+        credentials: "include",
       });
 
       const raw = await meRes.text();
@@ -77,11 +91,10 @@ export default function LoginPage() {
         return;
       }
 
-      // 3) 전역 Auth 상태 저장 ⭐️
+      // 3) 전역 Auth 상태 저장
       setUser(me.data);
 
       const role = me.data.roleCode?.trim().toUpperCase();
-
       if (role === "ADMIN") router.push("/admin");
       else router.push("/");
 
@@ -94,7 +107,7 @@ export default function LoginPage() {
   };
 
   // ---------------------------
-  // 비밀번호 재설정
+  // 비밀번호 재설정 시뮬레이션
   // ---------------------------
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,9 +120,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex relative">
 
-      {/* ------------------------------------- */}
-      {/* 🔙 홈으로 버튼 */}
-      {/* ------------------------------------- */}
+      {/* 🔙 홈으로 */}
       <button
         onClick={() => router.push("/")}
         className="absolute top-4 left-4 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -156,7 +167,6 @@ export default function LoginPage() {
 
               {/* 로그인 form */}
               <form className="space-y-6 mt-6" onSubmit={handleLogin}>
-
                 <div className="space-y-2">
                   <Label htmlFor="employeeId" className="text-foreground">
                     사번
@@ -209,7 +219,7 @@ export default function LoginPage() {
             </>
           ) : (
             <>
-              {/* 비밀번호 찾기로 돌아가기 */}
+              {/* 비밀번호 찾기 */}
               <button
                 onClick={() => setIsPasswordReset(false)}
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -265,9 +275,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ------------------------------------------------ */}
-      {/* 🔥 오른쪽 애니메이션 영역 */}
-      {/* ------------------------------------------------ */}
+      {/* 오른쪽 애니메이션 영역 */}
       <div
         className={`hidden lg:flex w-1/2 bg-primary items-center justify-center p-12 transition-all duration-700 ${
           isPasswordReset ? "lg:order-1" : "lg:order-2"
