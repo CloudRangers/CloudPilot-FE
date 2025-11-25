@@ -2,14 +2,13 @@ pipeline {
     agent any
 
     environment {
+        // ── EC2 접속 정보 ──
+        EC2_USER  = 'ubuntu'                          // EC2 리눅스 사용자
+        EC2_HOST  = '10.0.0.244'                      // EC2 IP 또는 도메인
+        APP_DIR   = '/home/ubuntu/cloudpilot-fe'      // EC2 안에서 FE 디렉터리
 
-        // ── EC2 접속 정보 (필수 수정) ──
-        EC2_USER  = 'ubuntu'                  // EC2 리눅스 사용자
-        EC2_HOST  = '10.0.0.244'         // 🔧 여기 EC2 공인 IP 또는 도메인
-        APP_DIR   = '/home/ubuntu/cloudpilot-fe' // 🔧 EC2 안에서 FE가 있을 디렉터리
-
-        // ── 배포할 브랜치 (필수 수정) ──
-        GIT_BRANCH = 'feat/#28'               // 🔧 Jenkins Job이 보고 있는 브랜치
+        // ── 배포할 브랜치 ──
+        GIT_BRANCH = 'feat/#28'
     }
 
     options {
@@ -19,11 +18,9 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                // 멀티브랜치면 checkout scm 써도 되고,
-                // 일반 Pipeline Job이면 브랜치/URL 지정해도 됨.
+                // 멀티브랜치면 checkout scm 그대로 사용
                 checkout scm
             }
         }
@@ -42,8 +39,12 @@ pipeline {
             steps {
                 sh '''
                   echo "== NPM install & build on Jenkins =="
-                  rm -f package-lock.json
-                  npm install --force
+
+                  # 필요 없으면 주석 처리해도 됨
+                  # rm -f package-lock.json
+
+                  # devDependencies까지 포함해서 설치
+                  npm install --force --include=dev
                   npm run build
                 '''
             }
@@ -51,41 +52,44 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                // Jenkins에 미리 만들어 둔 SSH 크리덴셜 ID 사용 (로그에 있는 'ubuntu')
-                sshagent(['was-deploy-key']) {
-                    // ⚠ 여기서는 Groovy 변수를 안 쓰고, 전부 쉘에서 $EC2_HOST 식으로만 씀
-                    sh '''
+                // 🔐 Jenkins에 미리 등록된 SSH Credential ID (was-deploy-key 사용)
+                sshagent(credentials: ['was-deploy-key']) {
+                    // 여기서는 Groovy 변수를 써서 실제 값들을 원격 쉘로 주입
+                    sh """
                       echo "== Deploy to EC2 =="
-                      ssh -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" '
+
+                      ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
                         set -e
 
-                        echo "[EC2] APP_DIR: $APP_DIR"
-                        echo "[EC2] GIT_BRANCH: $GIT_BRANCH"
+                        APP_DIR="${env.APP_DIR}"
+                        GIT_BRANCH="${env.GIT_BRANCH}"
+
+                        echo "[EC2] APP_DIR: \$APP_DIR"
+                        echo "[EC2] GIT_BRANCH: \$GIT_BRANCH"
 
                         # 프로젝트 디렉터리 없으면 처음 한 번만 clone
-                        if [ ! -d "$APP_DIR" ]; then
+                        if [ ! -d "\$APP_DIR" ]; then
                           echo "[EC2] Cloning repo..."
-                          git clone https://github.com/CloudRangers/CloudPilot-FE.git "$APP_DIR"
+                          git clone https://github.com/CloudRangers/CloudPilot-FE.git "\$APP_DIR"
                         fi
 
-                        cd "$APP_DIR"
+                        cd "\$APP_DIR"
 
                         echo "[EC2] Fetch & checkout branch"
                         git fetch --all
-                        git checkout "$GIT_BRANCH"
-                        git pull origin "$GIT_BRANCH"
+                        git checkout "\$GIT_BRANCH"
+                        git pull origin "\$GIT_BRANCH"
 
                         echo "[EC2] npm install & build on EC2"
-                        npm install --force
+                        npm install --force --include=dev
                         npm run build
 
                         echo "[EC2] Restart app with pm2"
-                        # pm2 이름은 원하면 바꿔도 됨
                         pm2 restart cloudpilot-fe || pm2 start npm --name cloudpilot-fe -- start
 
                         echo "[EC2] Deploy finished"
                       '
-                    '''
+                    """
                 }
             }
         }
