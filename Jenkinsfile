@@ -2,8 +2,9 @@ pipeline {
     agent any
 
     environment {
-        // 🔁 EC2에서 사용할 Git 브랜치 (필요하면 develop 등으로 변경)
+        // 🔁 EC2에서 사용할 Git 브랜치
         GIT_BRANCH = 'feat/#28'
+        // 🔁 Jenkins에서 SSH 연결할 대상 EC2 Host
         EC2_HOST   = 'ubuntu@10.0.0.244'
     }
 
@@ -25,16 +26,16 @@ pipeline {
         stage('Install & Build (Jenkins)') {
             steps {
                 sh '''
-                  rm -f package-lock.json
-                  npm install --force
-                  npm run build
+                    rm -f package-lock.json
+                    npm install --force
+                    npm run build
                 '''
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(['ec2-ssh']) {
+                sshagent(['ec2-ssh']) {   // 🔑 Jenkins Credential ID
                     sh '''
 ssh -o StrictHostKeyChecking=no ${EC2_HOST} << 'EOF'
 set -e
@@ -65,7 +66,7 @@ npm run build
 
 echo "📌 PM2 재시작 or 실행"
 
-# PM2로 Next 서버 재시작 (포트 3000)
+# PM2로 Next 서버 실행 또는 재시작
 pm2 describe cloudpilot-fe >/dev/null 2>&1 && \
   pm2 restart cloudpilot-fe || \
   pm2 start npm --name cloudpilot-fe -- start
