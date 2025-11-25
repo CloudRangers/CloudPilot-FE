@@ -1,17 +1,16 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { FeatureCard } from "@/components/feature-card"
-import { ServerCog, Package, FileCheck, LockKeyhole } from "lucide-react"
+import { useEffect, useState } from "react";
+import { useUser } from "@/app/providers/AuthProvider"; // ⭐️ 새로운 AuthProvider 훅
+import { Header } from "@/components/header";
+import { Footer } from "@/components/footer";
+import { FeatureCard } from "@/components/feature-card";
+import { ServerCog, Package, FileCheck, LockKeyhole } from "lucide-react";
 
 export default function HomePage() {
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [featuresToShow, setFeaturesToShow] = useState<any[]>([])
+  const { user, loading } = useUser(); // ⭐️ useAuth → useUser 로 변경
+  const [featuresToShow, setFeaturesToShow] = useState<any[]>([]);
 
-  /** ✅ featureMap 정의 */
   const featureMap: Record<
     string,
     { title: string; description: string; icon: any; href: string }[]
@@ -78,43 +77,39 @@ export default function HomePage() {
         href: "/request-package",
       },
     ],
-  }
+  };
 
-  /** ✅ 로그인 상태 실시간 반영 */
+  // 🔥 user 정보가 바뀌면 Feature 목록 자동 업데이트
   useEffect(() => {
-    const checkLoginStatus = () => {
-      const storedRole = localStorage.getItem("userRole")
-      const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
-      setIsLoggedIn(isLoggedIn)
-      setUserRole(storedRole)
-      setFeaturesToShow(featureMap[storedRole ?? ""] ?? [])
+    if (user) {
+      setFeaturesToShow(featureMap[user.roleCode] ?? []);
+    } else {
+      setFeaturesToShow([]);
     }
-
-    // ✅ 초기 로드
-    checkLoginStatus()
-    // ✅ 다른 탭/컴포넌트에서 localStorage 변경 시 실시간 반영
-    window.addEventListener("storage", checkLoginStatus)
-    return () => window.removeEventListener("storage", checkLoginStatus)
-  }, [])
+  }, [user]);
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
+
       <main className="flex-1">
         <section className="container px-4 py-12 md:px-6 md:py-20">
+
           <div className="mx-auto max-w-3xl text-center space-y-4 mb-16">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl text-balance">
-              인프라 자동 생성으로
-              <br />
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+              인프라 자동 생성으로 <br />
               <span className="text-primary">더 빠른 배포</span>를 경험하세요
             </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed text-pretty">
-              Cloud Pilot은 복잡한 인프라 설정을 자동화하여 팀이 비즈니스 로직에 집중할 수 있도록 돕습니다.
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              Cloud Pilot은 복잡한 인프라 설정을 자동화하여 팀이 비즈니스 로직에 집중하도록 돕습니다.
             </p>
           </div>
 
-          {/* ✅ 로그인 상태별 분기 */}
-          {!isLoggedIn ? (
+          {loading ? (
+            <div className="flex justify-center mt-12 text-muted-foreground">
+              로딩 중...
+            </div>
+          ) : !user ? (
             <div className="flex justify-center mt-12">
               <FeatureCard
                 title="로그인이 필요합니다"
@@ -138,7 +133,8 @@ export default function HomePage() {
           )}
         </section>
       </main>
+
       <Footer />
     </div>
-  )
+  );
 }
