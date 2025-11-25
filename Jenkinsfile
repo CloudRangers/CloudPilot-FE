@@ -35,7 +35,7 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(['ec2-ssh']) {   // 🔑 Jenkins Credential ID
+                sshagent(['was-deploy-key']) {   // 🔑 Jenkins Credential ID
                     sh '''
 ssh -o StrictHostKeyChecking=no ${EC2_HOST} << 'EOF'
 set -e
