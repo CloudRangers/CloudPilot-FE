@@ -8,6 +8,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { InfraFlowAnimation } from "@/components/infra-flow-animation"
 
+interface LoginApiResponse<T> {
+  success: boolean
+  data: T
+  message?: string | null
+}
+
+interface LoginResponseDto {
+  username: string
+  roleCode: string
+  roleName: string
+  teamName: string
+}
+
 export default function LoginPage() {
   const [isPasswordReset, setIsPasswordReset] = useState(false)
   const [employeeId, setEmployeeId] = useState("")
@@ -17,36 +30,81 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    setTimeout(() => {
-      if (employeeId === "admin" && password === "1234") {
-        localStorage.setItem("isLoggedIn", "true")
-        localStorage.setItem("userRole", "ADMIN")
+    try {
+      // BE LoginRequest: empno (Long), password(String)
+      const empno = Number(employeeId)
+      if (Number.isNaN(empno)) {
+        alert("사번은 숫자만 입력해주세요.")
+        setLoading(false)
+        return
+      }
+
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        // ✅ httpOnly 쿠키(access_token, refresh_token) 주고받기 위해 필수
+        credentials: "include",
+        body: JSON.stringify({
+          empno,
+          password,
+        }),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        console.error("login failed:", text)
+        alert("❌ 로그인 실패: 사번 또는 비밀번호를 확인하세요.")
+        setLoading(false)
+        return
+      }
+
+      const json: LoginApiResponse<LoginResponseDto> = await res.json()
+      const data = json.data
+
+      if (!json.success || !data) {
+        alert("❌ 로그인 실패: 서버 응답이 올바르지 않습니다.")
+        setLoading(false)
+        return
+      }
+
+      // ✅ FE 상태용 정보 저장 (실제 인증은 httpOnly 쿠키로)
+      localStorage.setItem("isLoggedIn", "true")
+      localStorage.setItem("userRole", data.roleCode)
+      localStorage.setItem("username", data.username)
+      localStorage.setItem("teamName", data.teamName)
+
+      // 역할에 따라 라우팅
+      if (data.roleCode === "ADMIN") {
         alert("✅ 관리자 로그인 성공!")
         router.push("/admin")
-      } else if (employeeId === "head" && password === "1234") {
-        localStorage.setItem("isLoggedIn", "true")
-        localStorage.setItem("userRole", "HEAD")
+      } else if (data.roleCode === "HEAD") {
         alert("✅ 부장 로그인 성공!")
-        router.push("/")
-      } else if (employeeId === "leader" && password === "1234") {
-        localStorage.setItem("isLoggedIn", "true")
-        localStorage.setItem("userRole", "LEADER")
+        router.push("/vm-status")
+      } else if (data.roleCode === "LEADER") {
         alert("✅ 팀장 로그인 성공!")
-        router.push("/")
-      } else if (employeeId === "member" && password === "1234") {
-        localStorage.setItem("isLoggedIn", "true")
-        localStorage.setItem("userRole", "MEMBER")
+        router.push("/vm-status")
+      } else if (data.roleCode === "MEMBER") {
         alert("✅ 팀원 로그인 성공!")
-        router.push("/")
+        router.push("/vm-status")
       } else {
-        alert("❌ 로그인 실패: 아이디 또는 비밀번호를 확인하세요.")
+        alert(`✅ 로그인 성공 (${data.roleCode})`)
+        router.push("/")
       }
+    } catch (error) {
+      console.error(error)
+      alert("❌ 로그인 중 오류가 발생했습니다.")
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   const handlePasswordReset = (e: React.FormEvent) => {
@@ -113,7 +171,7 @@ export default function LoginPage() {
                   <Input
                     id="employeeId"
                     type="text"
-                    placeholder="사번을 입력하세요 (예: admin / leader)"
+                    placeholder="사번을 입력하세요 (예: 10001)"
                     className="w-full h-12"
                     value={employeeId}
                     onChange={(e) => setEmployeeId(e.target.value)}
