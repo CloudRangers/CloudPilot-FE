@@ -2,8 +2,6 @@ pipeline {
     agent any
 
     environment {
-        // ── 기본 환경 설정 ──
-        NODE_ENV  = 'production'
 
         // ── EC2 접속 정보 (필수 수정) ──
         EC2_USER  = 'ubuntu'                  // EC2 리눅스 사용자
