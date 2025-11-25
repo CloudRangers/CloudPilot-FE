@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        // EC2에서 쓸 브랜치 (지금 feat/#28 테스트 중이면 나중에 develop으로 바꾸면 됨)
+        // 🔁 EC2에서 사용할 Git 브랜치 (필요하면 develop 등으로 변경)
         GIT_BRANCH = 'feat/#28'
-        EC2_HOST   = 'ubuntu@10.0.0.244'   // 🔁 여기에 실제 WAS 서버
+        EC2_HOST   = 'ubuntu@10.0.0.244'
     }
 
     stages {
@@ -34,45 +34,56 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                // 🔹 Jenkins 에 등록해둔 SSH key ID 사용
-                sshagent(credentials: ['ec2-ssh']) {
+                sshagent(['ubuntu']) {
                     sh '''
-                      ssh -o StrictHostKeyChecking=no $EC2_HOST '
-                        # 배포 디렉토리 없으면 만들기
-                        mkdir -p /opt/cloudpilot-fe &&
-                        cd /opt/cloudpilot-fe &&
+ssh -o StrictHostKeyChecking=no ${EC2_HOST} << 'EOF'
+set -e
 
-                        # 처음엔 git clone, 그 다음부턴 git pull
-                        if [ ! -d .git ]; then
-                          git clone -b '$GIT_BRANCH' https://github.com/CloudRangers/CloudPilot-FE.git . 
-                        else
-                          git fetch origin '$GIT_BRANCH' &&
-                          git checkout '$GIT_BRANCH' &&
-                          git pull origin '$GIT_BRANCH'
-                        fi &&
+APP_DIR=/home/ubuntu/cloudpilot-fe
 
-                        # EC2에서 의존성 설치 + 빌드
-                        rm -f package-lock.json &&
-                        npm install --force &&
-                        npm run build &&
+# 📌 배포 디렉토리 없으면 생성
+mkdir -p "$APP_DIR"
+cd "$APP_DIR"
 
-                        # pm2로 Next 서버 실행/재시작 (포트 3000)
-                        npx pm2 describe cloudpilot-fe >/dev/null 2>&1 && \
-                          npx pm2 restart cloudpilot-fe || \
-                          npx pm2 start npm --name cloudpilot-fe -- start
-                      '
+echo "📌 Git Pull / Clone 시작"
+
+# 처음엔 git clone, 이후 git pull
+if [ ! -d .git ]; then
+  git clone -b ${GIT_BRANCH} https://github.com/CloudRangers/CloudPilot-FE.git .
+else
+  git fetch origin ${GIT_BRANCH}
+  git checkout ${GIT_BRANCH}
+  git pull origin ${GIT_BRANCH}
+fi
+
+echo "📌 npm install & build 시작"
+
+# EC2에서 의존성 설치 + 빌드
+rm -f package-lock.json
+npm install --force
+npm run build
+
+echo "📌 PM2 재시작 or 실행"
+
+# PM2로 Next 서버 재시작 (포트 3000)
+pm2 describe cloudpilot-fe >/dev/null 2>&1 && \
+  pm2 restart cloudpilot-fe || \
+  pm2 start npm --name cloudpilot-fe -- start
+
+EOF
                     '''
                 }
             }
         }
+
     }
 
     post {
         success {
-            echo '✅ FE build + EC2 배포 성공 (Next 서버 모드, /api/prometheus 포함)'
+            echo '✅ FE build + EC2 배포 성공 (Next.js 서버모드 PM2)'
         }
         failure {
-            echo '🚨 빌드 또는 배포 실패, Jenkins 로그 확인 필요'
+            echo '🚨 빌드 또는 배포 실패 — Jenkins 콘솔 로그 확인'
         }
     }
 }
