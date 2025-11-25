@@ -54,7 +54,7 @@ pipeline {
         stage('Deploy to EC2') {
             steps {
                 // Jenkins에 미리 만들어 둔 SSH 크리덴셜 ID 사용 (로그에 있는 'ubuntu')
-                sshagent(credentials: ['ubuntu']) {
+                sshagent(['was-deploy-key']) {
                     // ⚠ 여기서는 Groovy 변수를 안 쓰고, 전부 쉘에서 $EC2_HOST 식으로만 씀
                     sh '''
                       echo "== Deploy to EC2 =="
