@@ -7,7 +7,7 @@ pipeline {
 
         // 🔁 FE 배포 대상 서버
         DEPLOY_USER    = 'ubuntu'
-        DEPLOY_SERVER  = '10.0.0.244'
+        DEPLOY_SERVER  = '10.0.0.244, 10.0.0.210'
         AWS_DEFAULT_REGION = "ap-northeast-2"
         ECR_ID = "291418340911"               // AWS 계정 ID
         ECR_REPO = "cloudpilot/frontend"      // FE용 ECR repo 
@@ -59,18 +59,24 @@ pipeline {
                 }
             }
         }
-        stage('Deploy to EC2') {
+        stage('Deploy to EC2 (Multi-Server)') {
             steps {
-                sshagent(['was-deploy-key']) {   // 🔑 EC2 접속용 SSH 키
-                    sh """
-                        echo "🚀 Deploying FE to EC2..."
+                sshagent(['was-deploy-key']) {
+                    script {
+                        def servers = DEPLOY_SERVERS.split(" ")
 
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} '
-                            cd /home/ubuntu/app
-                            chmod +x start.sh
-                            ./start.sh
-                        '
-                    """
+                        servers.each { server ->
+                            sh """
+                                echo "🚀 Deploying FE to ${server} ..."
+
+                                ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${server} '
+                                    cd /home/ubuntu/app
+                                    chmod +x start.sh
+                                    ./start.sh
+                                '
+                            """
+                        }
+                    }
                 }
             }
         }
