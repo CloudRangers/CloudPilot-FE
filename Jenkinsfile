@@ -7,7 +7,7 @@ pipeline {
 
         // 🔁 FE 배포 대상 서버
         DEPLOY_USER    = 'ubuntu'
-        DEPLOY_SERVERS  = '10.0.0.244, 10.0.0.210'
+        DEPLOY_SERVERS  = '10.0.0.244 10.0.0.210'
         AWS_DEFAULT_REGION = "ap-northeast-2"
         ECR_ID = "291418340911"               // AWS 계정 ID
         ECR_REPO = "cloudpilot/frontend"      // FE용 ECR repo 
