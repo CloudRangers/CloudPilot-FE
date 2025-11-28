@@ -37,6 +37,7 @@ pipeline {
                     npm run build
                 '''
             }
+            
         }
 
         stage('Push to ECR') {
