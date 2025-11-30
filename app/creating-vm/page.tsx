@@ -41,10 +41,24 @@ export default function CreatingVMPage() {
       return
     }
 
+    let completionRedirectTimeoutId: number | null = null
     const es = new EventSource(`${apiBaseUrl}/sse/provision/${jobId}`)
 
+    const parsePayload = (event: MessageEvent): ProvisionProgressPayload | null => {
+      try {
+        return JSON.parse(event.data) as ProvisionProgressPayload
+      } catch (e) {
+        console.error("SSE payload parse error:", e, event.data)
+        setStatus("FAILED")
+        setDescription("서버 응답을 해석하는 중 오류가 발생했습니다.")
+        es.close()
+        return null
+      }
+    }
+
     const handleProgress = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as ProvisionProgressPayload
+      const data = parsePayload(event)
+      if (!data) return
 
       if (typeof data.progress === "number") {
         setProgress(data.progress)
@@ -61,18 +75,23 @@ export default function CreatingVMPage() {
     }
 
     const handleComplete = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as ProvisionProgressPayload
+      const data = parsePayload(event)
+      if (!data) return
 
       setProgress(typeof data.progress === "number" ? data.progress : 100)
+
       if (data.description) {
         setDescription(data.description)
       }
       if (data.logLine) {
         setLogLine(data.logLine)
       }
+
+      // 최종 상태는 일단 성공으로 간주
       setStatus("SUCCEEDED")
 
-      setTimeout(() => {
+      // 0.5초 뒤에 다음 페이지로 이동
+      completionRedirectTimeoutId = window.setTimeout(() => {
         router.push("/assign-member")
       }, 500)
 
@@ -81,18 +100,25 @@ export default function CreatingVMPage() {
 
     const handleErrorEvent = (event: Event) => {
       const msgEvent = event as MessageEvent
+      const defaultErrorMessage = "알 수 없는 오류가 발생했습니다. 다시 시도해 주세요."
+
       if (msgEvent.data) {
         try {
           const data = JSON.parse(msgEvent.data) as ProvisionProgressPayload
           if (data.description) {
             setDescription(data.description)
+          } else {
+            setDescription(defaultErrorMessage)
           }
           if (data.logLine) {
             setLogLine(data.logLine)
           }
-        } catch {
-          // ignore
+        } catch (e) {
+          console.error("SSE error payload parse error:", e, msgEvent.data)
+          setDescription(defaultErrorMessage)
         }
+      } else {
+        setDescription(defaultErrorMessage)
       }
 
       setStatus("FAILED")
@@ -105,10 +131,14 @@ export default function CreatingVMPage() {
 
     es.onopen = () => {
       // 연결 성공 시 필요하면 description 업데이트 가능
+      // setDescription("프로비저닝을 시작했습니다...")
     }
 
     return () => {
       es.close()
+      if (completionRedirectTimeoutId !== null) {
+        window.clearTimeout(completionRedirectTimeoutId)
+      }
     }
   }, [jobId, router])
 
