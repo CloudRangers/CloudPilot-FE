@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Progress } from "@/components/ui/progress"
 
@@ -20,17 +20,44 @@ interface ProvisionProgressPayload {
 export default function CreatingVMPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const jobId = searchParams.get("jobId")
 
+  const rawJobIds = searchParams.get("jobIds")
+  const singleJobIdParam = searchParams.get("jobId")
+  const batchId = searchParams.get("batchId")
+
+  // 단일/배치 모두 지원: ?jobId=123 또는 ?jobIds=123,124
+  const jobIds = useMemo<string[]>(() => {
+    if (rawJobIds && rawJobIds.trim().length > 0) {
+      return rawJobIds
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0)
+    }
+    if (singleJobIdParam) {
+      return [singleJobIdParam]
+    }
+    return []
+  }, [rawJobIds, singleJobIdParam])
+
+  const totalCount = jobIds.length
+
+  const [currentIndex, setCurrentIndex] = useState(0)
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState<ProvisionStatus>("RUNNING")
   const [description, setDescription] = useState("서버 리소스 할당 중...")
-  const [logLine, setLogLine] = useState<string | null>(null) // 지금은 UI에 안 씀
+
+  const currentJobId = jobIds[currentIndex] ?? null
+  const isFailed = status === "FAILED"
+
+  // job 목록이 바뀌면 무조건 첫 번째부터 다시 시작
+  useEffect(() => {
+    setCurrentIndex(0)
+  }, [rawJobIds, singleJobIdParam])
 
   useEffect(() => {
-    if (!jobId) {
+    if (!currentJobId) {
       setStatus("FAILED")
-      setDescription("jobId가 없어 작업을 시작할 수 없습니다.")
+      setDescription("진행 중인 작업(jobId)을 찾을 수 없습니다.")
       return
     }
 
@@ -41,24 +68,19 @@ export default function CreatingVMPage() {
       return
     }
 
-    let completionRedirectTimeoutId: number | null = null
-    const es = new EventSource(`${apiBaseUrl}/sse/provision/${jobId}`)
-
-    const parsePayload = (event: MessageEvent): ProvisionProgressPayload | null => {
-      try {
-        return JSON.parse(event.data) as ProvisionProgressPayload
-      } catch (e) {
-        console.error("SSE payload parse error:", e, event.data)
-        setStatus("FAILED")
-        setDescription("서버 응답을 해석하는 중 오류가 발생했습니다.")
-        es.close()
-        return null
-      }
+    // 새 job 시작할 때 기본 상태 초기화
+    setProgress(0)
+    setStatus("RUNNING")
+    if (totalCount > 1) {
+      setDescription(`총 ${totalCount}대 중 ${currentIndex + 1}번째 VM 생성 중입니다.`)
+    } else {
+      setDescription("서버 리소스 할당 중...")
     }
 
+    const es = new EventSource(`${apiBaseUrl}/sse/provision/${currentJobId}`)
+
     const handleProgress = (event: MessageEvent) => {
-      const data = parsePayload(event)
-      if (!data) return
+      const data = JSON.parse(event.data) as ProvisionProgressPayload
 
       if (typeof data.progress === "number") {
         setProgress(data.progress)
@@ -66,59 +88,55 @@ export default function CreatingVMPage() {
       if (data.description) {
         setDescription(data.description)
       }
-      if (data.logLine) {
-        setLogLine(data.logLine)
-      }
       if (data.status) {
         setStatus(data.status)
       }
     }
 
     const handleComplete = (event: MessageEvent) => {
-      const data = parsePayload(event)
-      if (!data) return
+      const data = JSON.parse(event.data) as ProvisionProgressPayload
 
       setProgress(typeof data.progress === "number" ? data.progress : 100)
-
       if (data.description) {
         setDescription(data.description)
       }
-      if (data.logLine) {
-        setLogLine(data.logLine)
+
+      // 아직 남은 VM이 있다면 다음 job으로 넘어감
+      if (currentIndex < totalCount - 1) {
+        es.close()
+        setCurrentIndex((prev) => prev + 1)
+        return
       }
 
-      // 최종 상태는 일단 성공으로 간주
+      // 마지막 VM 생성 완료 → 멤버 할당 페이지로 이동
       setStatus("SUCCEEDED")
-
-      // 0.5초 뒤에 다음 페이지로 이동
-      completionRedirectTimeoutId = window.setTimeout(() => {
-        router.push("/assign-member")
-      }, 500)
-
       es.close()
+
+      setTimeout(() => {
+        if (batchId) {
+          // 배치 생성이면 batchId 기준으로 멤버 할당
+          router.push(`/assign-member?batchId=${batchId}`)
+        } else if (currentJobId) {
+          // 단일 생성이면 jobId 기준
+          router.push(`/assign-member?jobId=${currentJobId}`)
+        } else {
+          router.push("/assign-member")
+        }
+      }, 500)
     }
 
-    const handleErrorEvent = (event: Event) => {
+    // Spring SseEmitter에서 name("error")로 보낸 이벤트 처리
+    const handleProvisionErrorEvent = (event: Event) => {
       const msgEvent = event as MessageEvent
-      const defaultErrorMessage = "알 수 없는 오류가 발생했습니다. 다시 시도해 주세요."
-
       if (msgEvent.data) {
         try {
           const data = JSON.parse(msgEvent.data) as ProvisionProgressPayload
           if (data.description) {
             setDescription(data.description)
-          } else {
-            setDescription(defaultErrorMessage)
           }
-          if (data.logLine) {
-            setLogLine(data.logLine)
-          }
-        } catch (e) {
-          console.error("SSE error payload parse error:", e, msgEvent.data)
-          setDescription(defaultErrorMessage)
+        } catch {
+          // ignore
         }
-      } else {
-        setDescription(defaultErrorMessage)
       }
 
       setStatus("FAILED")
@@ -127,22 +145,34 @@ export default function CreatingVMPage() {
 
     es.addEventListener("progress", handleProgress)
     es.addEventListener("complete", handleComplete)
-    es.addEventListener("error", handleErrorEvent)
+    es.addEventListener("error", handleProvisionErrorEvent)
 
     es.onopen = () => {
-      // 연결 성공 시 필요하면 description 업데이트 가능
-      // setDescription("프로비저닝을 시작했습니다...")
+      console.info("SSE 연결 성공:", currentJobId)
+    }
+
+    es.onerror = (event) => {
+      console.error("SSE 연결 오류:", event)
+      // 실제 작업 실패 여부는 서버에서 보내는 error 이벤트로 판단
     }
 
     return () => {
       es.close()
-      if (completionRedirectTimeoutId !== null) {
-        window.clearTimeout(completionRedirectTimeoutId)
-      }
     }
-  }, [jobId, router])
+  }, [currentJobId, currentIndex, totalCount, batchId, router])
 
-  const isFailed = status === "FAILED"
+  if (totalCount === 0) {
+    return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+          <div className="w-full max-w-md space-y-4 text-center">
+            <h1 className="text-2xl font-bold tracking-tight">작업 정보를 찾을 수 없습니다</h1>
+            <p className="text-muted-foreground text-sm">
+              유효한 jobId 또는 jobIds 파라미터가 필요합니다.
+            </p>
+          </div>
+        </div>
+    )
+  }
 
   return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -152,6 +182,11 @@ export default function CreatingVMPage() {
             <p className="text-muted-foreground">
               {isFailed ? "작업 중 오류가 발생했습니다." : "잠시만 기다려주세요..."}
             </p>
+            {totalCount > 1 && (
+                <p className="text-xs text-muted-foreground">
+                  총 {totalCount}대 중 {currentIndex + 1}번째 VM 생성 중입니다.
+                </p>
+            )}
           </div>
 
           <div className="relative">
