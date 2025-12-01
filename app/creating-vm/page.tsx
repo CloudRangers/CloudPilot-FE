@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Progress } from "@/components/ui/progress"
 
@@ -17,7 +17,12 @@ interface ProvisionProgressPayload {
   logLine?: string
 }
 
-export default function CreatingVMPage() {
+/**
+ * 실제 로직이 들어 있는 컴포넌트
+ * - useSearchParams 사용
+ * - SSE 구독 및 진행률 표시
+ */
+function CreatingVMContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -208,5 +213,22 @@ export default function CreatingVMPage() {
           </div>
         </div>
       </div>
+  )
+}
+
+export default function CreatingVMPage() {
+  return (
+      <Suspense
+          fallback={
+            <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+              <div className="w-full max-w-md space-y-4 text-center">
+                <h1 className="text-2xl font-bold tracking-tight">가상머신 생성 화면 준비 중...</h1>
+                <p className="text-muted-foreground text-sm">잠시만 기다려 주세요.</p>
+              </div>
+            </div>
+          }
+      >
+        <CreatingVMContent />
+      </Suspense>
   )
 }
