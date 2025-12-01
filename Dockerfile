@@ -13,7 +13,7 @@ RUN npm run build  # ← Turbopack 정상 빌드됨
 FROM node:20-bullseye
 WORKDIR /app
 
-COPY --from-builder /app .
+COPY --from=builder /app .
 
 EXPOSE 3000
 CMD ["npm", "start"]
