@@ -1,3 +1,4 @@
+// ...existing code...
 "use client";
 
 import { useEffect, useState } from "react";
@@ -79,7 +80,7 @@ export default function HomePage() {
     ],
   };
 
-  // 🔥 user 정보가 바뀌면 Feature 목록 자동 업데이트
+  // 🔥 user 정보가 바뀌면 Feature 목록 자동업데이트
   useEffect(() => {
     if (user) {
       setFeaturesToShow(featureMap[user.roleCode] ?? []);
@@ -93,7 +94,7 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1">
-        <section className="container px-4 py-12 md:px-6 md:py-20">
+        <section className="container mx-auto px-4 py-12 md:px-6 md:py-20">
 
           <div className="mx-auto max-w-3xl text-center space-y-4 mb-16">
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
@@ -119,7 +120,8 @@ export default function HomePage() {
               />
             </div>
           ) : (
-            <div className="flex flex-wrap justify-center gap-20">
+            // 변경: flex -> grid로 고정 열수 지정 (반응형)
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
               {featuresToShow.map((feature, index) => (
                 <FeatureCard
                   key={index}
@@ -138,3 +140,4 @@ export default function HomePage() {
     </div>
   );
 }
+// ...existing code...
