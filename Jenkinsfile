@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        // 🔁 FE 브랜치 (필요하면 develop 등으로 변경)
-        GIT_BRANCH = 'feat/#28'
+        
+        GIT_BRANCH = 'develop'
 
         // 🔁 FE 배포 대상 서버
         DEPLOY_USER    = 'ubuntu'
