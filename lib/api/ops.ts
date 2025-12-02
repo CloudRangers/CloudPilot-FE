@@ -1,23 +1,7 @@
-import axios from 'axios';
-import { useAuthStore } from '@/lib/hooks/use-auth';
+// lib/api/ops.ts
+import { apiClient } from "@/lib/api/base-client";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/ops/v1';
-
-const opsClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-opsClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+const OPS_PREFIX = "/ops/v1";
 
 export interface TimeSeriesPoint {
   timestamp: string;
@@ -71,13 +55,13 @@ export interface AlertRuleRequest {
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
+  message?: string;
 }
 
-/** 🔍 이상징후 분석 DTO */
 export interface AnomalyDetectionRequestDto {
   vmId: string;
   metricNames: string[];
-  metrics: Record<string, number[]>; // ex) { cpu_usage: [0.3, 0.8, ...] }
+  metrics: Record<string, number[]>;
 }
 
 export interface AnomalyDetectionResultDto {
@@ -89,106 +73,119 @@ export interface AnomalyDetectionResultDto {
   severity: string;
 }
 
-/** ✅ ops API 클라이언트 */
+// 🔹 공통으로 vmId 인코딩
+const vmPath = (vmId: string) =>
+  `${OPS_PREFIX}/vms/${encodeURIComponent(vmId)}`;
+
 export const opsApi = {
+  /** 📊 단일 메트릭 (Recharts 용) */
   getMetricsForRecharts: async (
     vmId: string,
     metricName: string,
-    rangeMinutes: number = 5,
-    stepSeconds: number = 15
+    rangeMinutes = 5,
+    stepSeconds = 15
   ) => {
-    const response = await opsClient.get<ApiResponse<RechartsDataResponse>>(
-      `/vms/${vmId}/metrics/recharts`,
+    const res = await apiClient.get<ApiResponse<RechartsDataResponse>>(
+      `${vmPath(vmId)}/metrics/recharts`,
       {
         params: { metricName, rangeMinutes, stepSeconds },
       }
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 📊 메트릭 통계치 */
   getMetricAggregation: async (
     vmId: string,
     metricName: string,
-    rangeMinutes: number = 5
+    rangeMinutes = 5
   ) => {
-    const response = await opsClient.get<ApiResponse<MetricAggregation>>(
-      `/vms/${vmId}/metrics/aggregation`,
+    const res = await apiClient.get<ApiResponse<MetricAggregation>>(
+      `${vmPath(vmId)}/metrics/aggregation`,
       {
         params: { metricName, rangeMinutes },
       }
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 📊 여러 메트릭 한번에 */
   getMultipleMetrics: async (
     vmId: string,
     metricNames: string[],
-    rangeMinutes: number = 5,
-    stepSeconds: number = 15
+    rangeMinutes = 5,
+    stepSeconds = 15
   ) => {
-    const response = await opsClient.get('/vms/' + vmId + '/metrics/multiple', {
-      params: {
-        metricNames: metricNames.join(','),
-        rangeMinutes,
-        stepSeconds,
-      },
-    });
-    return response.data;
+    const res = await apiClient.get<ApiResponse<any>>(
+      `${vmPath(vmId)}/metrics/multiple`,
+      {
+        params: {
+          metricNames: metricNames.join(","),
+          rangeMinutes,
+          stepSeconds,
+        },
+      }
+    );
+    return res.data;
   },
 
+  /** 🚨 알람 규칙 전체 조회 */
   getAlertRules: async () => {
-    const response = await opsClient.get<ApiResponse<AlertRule[]>>(
-      '/alert-rules'
+    const res = await apiClient.get<ApiResponse<AlertRule[]>>(
+      `${OPS_PREFIX}/alert-rules`
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 🚨 알람 생성 */
   createAlertRule: async (data: AlertRuleRequest) => {
-    const response = await opsClient.post<ApiResponse<AlertRule>>(
-      '/alert-rules',
+    const res = await apiClient.post<ApiResponse<AlertRule>>(
+      `${OPS_PREFIX}/alert-rules`,
       data
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 🚨 알람 업데이트 */
   updateAlertRule: async (id: number, data: AlertRuleRequest) => {
-    const response = await opsClient.put<ApiResponse<AlertRule>>(
-      `/alert-rules/${id}`,
+    const res = await apiClient.put<ApiResponse<AlertRule>>(
+      `${OPS_PREFIX}/alert-rules/${id}`,
       data
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 🚨 알람 삭제 */
   deleteAlertRule: async (id: number) => {
-    const response = await opsClient.delete<ApiResponse<void>>(
-      `/alert-rules/${id}`
+    const res = await apiClient.delete<ApiResponse<void>>(
+      `${OPS_PREFIX}/alert-rules/${id}`
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 🚨 알람 활성/비활성 토글 */
   toggleAlertRule: async (id: number, enabled: boolean) => {
-    const response = await opsClient.patch<ApiResponse<AlertRule>>(
-      `/alert-rules/${id}/toggle`,
+    const res = await apiClient.patch<ApiResponse<AlertRule>>(
+      `${OPS_PREFIX}/alert-rules/${id}/toggle`,
       null,
       { params: { enabled } }
     );
-    return response.data;
+    return res.data;
   },
 
+  /** 🚨 VM별 알람 조회 */
   getAlertRulesByVm: async (vmId: string) => {
-    const response = await opsClient.get<ApiResponse<AlertRule[]>>(
-      `/alert-rules/vm/${vmId}`
+    const res = await apiClient.get<ApiResponse<AlertRule[]>>(
+      `${OPS_PREFIX}/alert-rules/vm/${encodeURIComponent(vmId)}`
     );
-    return response.data;
+    return res.data;
   },
 
-  /** 🔍 AI 이상징후 분석 호출 (BE: /ops/v1/anomaly-detection) */
+  /** 🤖 AI 이상징후 분석 */
   detectAnomaly: async (payload: AnomalyDetectionRequestDto) => {
-    const response =
-      await opsClient.post<ApiResponse<AnomalyDetectionResultDto>>(
-        `/anomaly-detection`,
-        payload
-      );
-    return response.data;
+    const res = await apiClient.post<
+      ApiResponse<AnomalyDetectionResultDto>
+    >(`${OPS_PREFIX}/anomaly-detection`, payload);
+    return res.data;
   },
 };

@@ -39,6 +39,12 @@ function getPowerStateBadgeClass(powerState: string) {
 // 정렬 키: 이름 / 상태
 type SortKey = "name" | "powerState";
 
+interface VCenterVmTableProps {
+  teamId?: number | null;
+  /** ✅ 행 클릭 시 VM 정보를 상위 컴포넌트로 올리고 싶을 때 사용 */
+  onVmClick?: (vm: VCenterVm) => void;
+}
+
 // Prometheus 값이 0~1 로 올 수도, 0~100 으로 올 수도 있을 때 안전하게 퍼센트로 바꾸는 헬퍼
 function toPercent(value: number | null | undefined): number | null {
   if (value == null) return null;
@@ -47,7 +53,7 @@ function toPercent(value: number | null | undefined): number | null {
   return Math.round(value);
 }
 
-export function VCenterVmTable() {
+export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
   const [vms, setVms] = useState<VCenterVm[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,9 +73,12 @@ export function VCenterVmTable() {
         setLoading(true);
         setError(null);
 
+        const effectiveTeamId =
+          typeof teamId === "number" ? teamId : undefined;
+
         const [vmRes, metricRes] = await Promise.all([
-          vcenterApi.getAllVms(),
-          prometheusApi.getVmMetrics(),
+          vcenterApi.getAllVms(effectiveTeamId),
+          prometheusApi.getVmMetrics(effectiveTeamId),
         ]);
 
         if (!vmRes.success) {
@@ -93,7 +102,7 @@ export function VCenterVmTable() {
     };
 
     fetchData();
-  }, []);
+  }, [teamId]);
 
   // 🔹 특정 VM에 해당하는 Prometheus 메트릭 찾기 (이름 우선, 없으면 vmId)
   const getMetricForVm = (vm: VCenterVm): VmMetricSummary | undefined => {
@@ -267,7 +276,11 @@ export function VCenterVmTable() {
         </TableHeader>
         <TableBody>
           {filteredSortedVms.map((vm) => (
-            <TableRow key={vm.vmId}>
+            <TableRow
+              key={vm.vmId}
+              className={onVmClick ? "cursor-pointer hover:bg-muted/50" : ""}
+              onClick={() => onVmClick?.(vm)}  
+            >
               <TableCell className="font-mono text-xs">{vm.vmId}</TableCell>
               <TableCell>{vm.name}</TableCell>
               <TableCell>
