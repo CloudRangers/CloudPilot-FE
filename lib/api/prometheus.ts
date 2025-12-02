@@ -1,28 +1,28 @@
 // src/lib/api/prometheus.ts
-import axios from "axios";
-import type { ApiResponse } from "@/lib/api/vcenter";
+import { apiClient } from "@/lib/api/base-client";
+import type { ApiResponse } from "@/lib/api/ops";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-
-const prometheusClient = axios.create({
-  baseURL: BASE_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
+// vCenter VM 테이블에서 기대하는 메트릭 구조
 export interface VmMetricSummary {
-  vmId: string | null;
-  vmName: string;
-  cpuUsage: number | null;
-  memoryUsage: number | null;
-  metricsAvailable: boolean;
+  vmName?: string;
+  vmId?: string;
+
+  cpuUsage?: number | null;    // 0~1 이거나 0~100
+  memoryUsage?: number | null; // 0~1 이거나 0~100
+
+  metricsAvailable?: boolean;
 }
 
+// BE가 { "<vmName or vmId>": VmMetricSummary } 형태로 줄 걸 가정
+export type VmMetricMap = Record<string, VmMetricSummary>;
+
 export const prometheusApi = {
-  getVmMetrics: async () => {
-    const res = await prometheusClient.get<
-      ApiResponse<Record<string, VmMetricSummary>>
-    >("/monitor/vcenter/metrics");
-    return res.data;
+  // ✅ teamId 옵션 추가
+  getVmMetrics: async (teamId?: number) => {
+    const res = await apiClient.get<ApiResponse<VmMetricMap>>(
+      "/monitor/vcenter/metrics",
+      teamId != null ? { params: { teamId } } : undefined,
+    );
+    return res.data; // { success, data, message }
   },
 };

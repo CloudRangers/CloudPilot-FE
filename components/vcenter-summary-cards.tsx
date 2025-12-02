@@ -6,7 +6,11 @@ import { Card } from "@/components/ui/card";
 import { vcenterApi, VCenterSummary } from "@/lib/api/vcenter";
 import { Cpu, Power, PowerOff, AlertTriangle } from "lucide-react";
 
-export function VCenterSummaryCards() {
+interface VCenterSummaryCardsProps {
+  teamId?: number | null;
+}
+
+export function VCenterSummaryCards({ teamId }: VCenterSummaryCardsProps) {
   const [summary, setSummary] = useState<VCenterSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +21,10 @@ export function VCenterSummaryCards() {
         setLoading(true);
         setError(null);
 
-        const res = await vcenterApi.getSummary(); // /monitor/vcenter/summary
+        // 🔹 teamId 있으면 쿼리에 붙여서 호출
+        const res = await vcenterApi.getSummary(
+          typeof teamId === "number" ? teamId : undefined
+        );
 
         if (!res.success || !res.data) {
           setError("vCenter 요약 정보 조회 실패");
@@ -34,7 +41,7 @@ export function VCenterSummaryCards() {
     };
 
     fetchSummary();
-  }, []);
+  }, [teamId]);
 
   if (loading) {
     return (

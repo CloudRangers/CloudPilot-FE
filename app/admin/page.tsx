@@ -9,16 +9,26 @@ import { Footer } from "@/components/footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  AlertCircle,
+  AlertTriangle,
   Cpu,
   HardDrive,
   Network,
-  Users,
   Zap,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PrometheusMonitoring } from "@/components/prometheus-monitoring";
 import { GrafanaEmbed } from "@/components/grafana-embed";
+
+import { VCenterSummaryCards } from "@/components/vcenter-summary-cards";
+import { VCenterVmTable } from "@/components/vcenter-vm-table";
+
+import { opsApi } from "@/lib/api/ops";
+import type { AnomalyDetectionResultDto } from "@/lib/api/ops";
+
+// ✅ vCenter VM 타입 (테이블/상세 모달용)
+import type { VCenterVm as VCenterVmApiVm } from "@/lib/api/vcenter";
+
 import {
   Dialog,
   DialogContent,
@@ -27,85 +37,95 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// 🔹 vCenter 컴포넌트
-import { VCenterSummaryCards } from "@/components/vcenter-summary-cards";
-import { VCenterVmTable } from "@/components/vcenter-vm-table";
-
-// 🔹 AI 이상징후 분석 API
-import { opsApi } from "@/lib/api/ops";
-import type { AnomalyDetectionResultDto } from "@/lib/api/ops";
-
+// --- DEMO VM 타입 ---
 type VM = {
   name: string;
-  cpu: number;
-  memory: number;
+  cpu: number; // %
+  memory: number; // %
   status: "running" | "warning" | "stopped";
   disk?: number;
   network?: number;
   uptime?: string;
 };
 
+// --- 운영 모니터링 요약 타입 ---
+type AdminOverview = {
+  dailyUserCount: number;
+  dailyUserChange: number;
+  systemLoadLevel: string;
+  avgResponseMs: number;
+  errorCount24h: number;
+};
+
+// vCenter VM 타입 (이슈 VM 섹션용) → 이름 변경해서 충돌 방지
+type IssueVCenterPowerState = "POWERED_ON" | "POWERED_OFF" | "SUSPENDED";
+type IssueVCenterAlarmStatus = "OK" | "WARNING" | "CRITICAL";
+
+type IssueVCenterVm = {
+  id: string | number;
+  name: string;
+  cpuCores: number;
+  memoryGb: number;
+  diskGb: number;
+  osName?: string | null;
+  powerState: IssueVCenterPowerState;
+  alarmStatus: IssueVCenterAlarmStatus;
+  teamId?: number | null;
+  teamName?: string | null;
+  clusterName?: string | null;
+  createdAt: string;
+};
+
 export default function AdminPage() {
   const router = useRouter();
+
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // DEMO VM 상세 모달용
   const [selectedVM, setSelectedVM] = useState<VM | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // 🔹 AI 이상징후 분석 상태
+  // vCenter VM 상세 모달용
+  const [selectedVcenterVm, setSelectedVcenterVm] =
+    useState<VCenterVmApiVm | null>(null);
+  const [isVcenterDetailOpen, setIsVcenterDetailOpen] = useState(false);
+
+  // AI 이상징후 분석 상태 (DEMO VM용)
   const [anomalyResult, setAnomalyResult] =
     useState<AnomalyDetectionResultDto | null>(null);
   const [anomalyLoading, setAnomalyLoading] = useState(false);
   const [anomalyError, setAnomalyError] = useState<string | null>(null);
 
-  // 🔹 DEMO용 하드코딩 VM 리스트 (모달에서만 사용)
-  const vmList: VM[] = [
-    {
-      name: "web-server-01",
-      cpu: 45,
-      memory: 68,
-      status: "running",
-      disk: 55,
-      network: 120,
-      uptime: "15일 3시간",
-    },
-    {
-      name: "api-server-01",
-      cpu: 72,
-      memory: 81,
-      status: "running",
-      disk: 67,
-      network: 340,
-      uptime: "22일 8시간",
-    },
-    {
-      name: "db-server-01",
-      cpu: 88,
-      memory: 92,
-      status: "warning",
-      disk: 89,
-      network: 85,
-      uptime: "30일 12시간",
-    },
-    {
-      name: "cache-server-01",
-      cpu: 34,
-      memory: 56,
-      status: "running",
-      disk: 42,
-      network: 210,
-      uptime: "7일 15시간",
-    },
-  ];
+  // DEMO VM 리스트
+  const [vmList, setVmList] = useState<VM[]>([]);
+  const [vmLoading, setVmLoading] = useState(false);
+  const [vmError, setVmError] = useState<string | null>(null);
+
+  // 운영 모니터링 요약 상태
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  // vCenter VM 실데이터 (이슈 VM 섹션용)
+  const [vcenterVms, setVcenterVms] = useState<IssueVCenterVm[]>([]);
+  const [vcenterLoading, setVcenterLoading] = useState(false);
+  const [vcenterError, setVcenterError] = useState<string | null>(null);
 
   const handleViewDetail = (vm: VM) => {
     setSelectedVM(vm);
-    setAnomalyResult(null); // 🔁 VM 바꿀 때마다 결과 초기화
+    setAnomalyResult(null);
     setAnomalyError(null);
     setIsDetailOpen(true);
   };
 
-  // 🔐 ADMIN 권한 체크
+  // ✅ vCenter 테이블에서 row 클릭했을 때
+  const handleVcenterVmClick = (vm: VCenterVmApiVm) => {
+    setSelectedVcenterVm(vm);
+    setIsVcenterDetailOpen(true);
+  };
+
+  // ADMIN 권한 체크
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
     const userRole = localStorage.getItem("userRole");
@@ -119,7 +139,134 @@ export default function AdminPage() {
     setLoading(false);
   }, [router]);
 
-  // 🔍 AI 이상징후 분석 호출
+  // 운영 모니터링 요약 데이터 로딩
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        setOverviewLoading(true);
+        setOverviewError(null);
+
+        const res = await fetch("http://localhost:8080/monitor/overview");
+        const json = await res.json();
+        console.log("[Admin] /monitor/overview 응답:", json);
+
+        if (!json.success || !json.data) {
+          throw new Error("invalid response");
+        }
+
+        setOverview(json.data as AdminOverview);
+      } catch (e) {
+        console.error("failed to load overview", e);
+        setOverviewError("운영 모니터링 데이터를 불러오지 못했습니다.");
+      } finally {
+        setOverviewLoading(false);
+      }
+    };
+
+    fetchOverview();
+  }, []);
+
+  // DEMO VM 리스트 로딩 (teamId 쿼리 반영)
+  useEffect(() => {
+    const fetchDemoVms = async () => {
+      try {
+        setVmLoading(true);
+        setVmError(null);
+
+        const teamId = localStorage.getItem("teamId");
+        const query = teamId ? `?teamId=${teamId}` : "";
+
+        const res = await fetch(
+          `http://localhost:8080/monitor/vcenter/demo-vms${query}`,
+        );
+        const json = await res.json();
+
+        if (!json.success || !Array.isArray(json.data)) {
+          throw new Error("invalid response");
+        }
+
+        type DemoVmDto = {
+          name: string;
+          cpuUsage?: number | null;
+          memoryUsage?: number | null;
+        };
+
+        const items = json.data as DemoVmDto[];
+
+        const vms: VM[] = items.map((item) => {
+          const cpuPercent =
+            item.cpuUsage != null ? Math.round(item.cpuUsage * 100) : 0;
+          const memPercent =
+            item.memoryUsage != null ? Math.round(item.memoryUsage * 100) : 0;
+
+          const isWarning = cpuPercent >= 80 || memPercent >= 85;
+
+          return {
+            name: item.name,
+            cpu: cpuPercent,
+            memory: memPercent,
+            status: isWarning ? "warning" : "running",
+          };
+        });
+
+        setVmList(vms);
+      } catch (e) {
+        console.error("failed to load demo vms", e);
+        setVmError("DEMO VM 리스트를 불러오지 못했습니다.");
+      } finally {
+        setVmLoading(false);
+      }
+    };
+
+    fetchDemoVms();
+  }, []);
+
+  // vCenter VM 실데이터 로딩 (이슈 VM 섹션용)
+  useEffect(() => {
+    const fetchVcenterVms = async () => {
+      try {
+        setVcenterLoading(true);
+        setVcenterError(null);
+
+        const res = await fetch("http://localhost:8080/monitor/vcenter/vms");
+        const json = await res.json();
+
+        if (!json.success || !json.data) {
+          throw new Error("invalid response");
+        }
+
+        const payload = json.data;
+        let items: IssueVCenterVm[] = Array.isArray(payload)
+          ? payload
+          : payload.items ?? [];
+
+        // 로그인한 사용자 teamId 기준으로 필터링
+        const teamIdStr = localStorage.getItem("teamId");
+        if (teamIdStr) {
+          const myTeamId = Number(teamIdStr);
+          items = items.filter(
+            (vm) => vm.teamId != null && Number(vm.teamId) === myTeamId,
+          );
+        }
+
+        setVcenterVms(items);
+      } catch (e) {
+        console.error("failed to load vCenter vms", e);
+        setVcenterError("vCenter VM 목록을 불러오지 못했습니다.");
+      } finally {
+        setVcenterLoading(false);
+      }
+    };
+
+    fetchVcenterVms();
+  }, []);
+
+  // 이슈 VM 필터링
+  const issueVms = vcenterVms.filter(
+    (vm) => vm.powerState === "POWERED_OFF" || vm.alarmStatus !== "OK",
+  );
+
+  // AI 이상징후 분석 호출 (DEMO VM용)
   const handleAnalyzeAnomaly = async () => {
     if (!selectedVM) return;
 
@@ -127,12 +274,11 @@ export default function AdminPage() {
       setAnomalyLoading(true);
       setAnomalyError(null);
 
-      // TODO: 나중에는 Prometheus나 BE에서 실제 메트릭 가져와서 넣기
       const payload = {
-        vmId: selectedVM.name, // 지금은 이름 기준. 나중에 실제 vmId로 교체 가능
+        vmId: selectedVM.name,
         metricNames: ["cpu_usage"],
         metrics: {
-          cpu_usage: [0.3, 0.7, 0.85, 0.9, 0.88], // 데모용 더미 데이터
+          cpu_usage: [0.3, 0.7, 0.85, 0.9, 0.88],
         },
       };
 
@@ -148,6 +294,44 @@ export default function AdminPage() {
     } finally {
       setAnomalyLoading(false);
     }
+  };
+
+  // 상세 모니터링 버튼 (Grafana 링크 - DEMO VM)
+  const handleOpenDetailMonitoring = () => {
+    if (!selectedVM) return;
+
+    const base =
+      process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000";
+    const uid =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail";
+    const slug =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail";
+
+    const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
+      selectedVM.name,
+    )}`;
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  // vCenter VM 메모리 GB 포맷
+  const formatMemoryGiB = (miB: number) =>
+    `${(miB / 1024).toFixed(1)} GB`;
+
+  // vCenter VM Grafana 링크
+  const openVcenterGrafana = (vm: VCenterVmApiVm) => {
+    const base =
+      process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000";
+    const uid =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail";
+    const slug =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail";
+
+    const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
+      vm.name,
+    )}`;
+
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   if (loading) {
@@ -169,74 +353,191 @@ export default function AdminPage() {
         <section className="container px-4 py-12 md:px-6">
           {/* 페이지 타이틀 */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-2">관리자 대시보드</h1>
+            <h1 className="mb-2 text-4xl font-bold">관리자 대시보드</h1>
             <p className="text-muted-foreground">
               vCenter + Prometheus 기반 실시간 리소스 현황 및 VM 모니터링
             </p>
           </div>
 
-          {/* ✅ vCenter Summary 카드 (실데이터) */}
+          {/* vCenter Summary 카드 */}
           <VCenterSummaryCards />
 
-          {/* 운영 모니터링 (현재는 데모 값) */}
-          <Card className="p-6 mb-8">
-            <h2 className="text-2xl font-bold mb-6">운영 모니터링</h2>
-            <div className="grid gap-6 md:grid-cols-3 mb-6">
-              <Card className="p-4 border-2">
-                <div className="flex items-center gap-3 mb-3">
-                  <Users className="h-5 w-5 text-blue-500" />
-                  <h3 className="font-semibold">일일 사용자 수</h3>
-                </div>
-                <div className="text-2xl font-bold mb-1">1,247명</div>
-                <p className="text-xs text-muted-foreground">
-                  전일 대비 +12.5%
-                </p>
-              </Card>
+          {/* 🔹 운영 모니터링 요약 카드 */}
+          <div className="mt-6">
+            {overviewLoading && (
+              <p className="text-sm text-muted-foreground">
+                운영 모니터링 요약 데이터를 불러오는 중입니다...
+              </p>
+            )}
+            {overviewError && (
+              <p className="text-sm text-red-500">{overviewError}</p>
+            )}
 
-              <Card className="p-4 border-2">
-                <div className="flex items-center gap-3 mb-3">
-                  <Zap className="h-5 w-5 text-orange-500" />
-                  <h3 className="font-semibold">시스템 부하</h3>
-                </div>
-                <div className="text-2xl font-bold mb-1">중간</div>
-                <p className="text-xs text-muted-foreground">
-                  평균 응답시간: 245ms
-                </p>
-              </Card>
+            {overview && !overviewLoading && !overviewError && (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {/* 일일 사용자 수 */}
+                <Card className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      일일 사용자 수
+                    </span>
+                    <Zap className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {overview.dailyUserCount.toLocaleString("ko-KR")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    전일 대비{" "}
+                    <span
+                      className={
+                        overview.dailyUserChange >= 0
+                          ? "text-emerald-600 font-semibold"
+                          : "text-red-600 font-semibold"
+                      }
+                    >
+                      {overview.dailyUserChange >= 0 ? "+" : ""}
+                      {overview.dailyUserChange}%
+                    </span>
+                  </div>
+                </Card>
 
-              <Card className="p-4 border-2">
-                <div className="flex items-center gap-3 mb-3">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                  <h3 className="font-semibold">에러 발생 수</h3>
+                {/* 시스템 부하 수준 */}
+                <Card className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      시스템 부하 수준
+                    </span>
+                    <Cpu className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {overview.systemLoadLevel}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    평균 응답 속도 {overview.avgResponseMs} ms
+                  </div>
+                </Card>
+
+                {/* 평균 응답 시간 */}
+                <Card className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      평균 응답 시간
+                    </span>
+                    <Network className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {overview.avgResponseMs} ms
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Prometheus 기반 최근 구간 평균
+                  </div>
+                </Card>
+
+                {/* 에러 발생 수 */}
+                <Card className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      최근 24시간 에러 수
+                    </span>
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                  </div>
+                  <div className="text-2xl font-bold text-destructive">
+                    {overview.errorCount24h.toLocaleString("ko-KR")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    어플리케이션 / 인프라 에러 집계
+                  </div>
+                </Card>
+              </div>
+            )}
+          </div>
+
+          {/* 이슈 VM 섹션 (vCenter 실데이터 기반) */}
+          <div className="mt-8 space-y-4">
+            {vcenterLoading && (
+              <p className="text-sm text-muted-foreground">
+                vCenter VM 상태를 불러오는 중입니다...
+              </p>
+            )}
+            {vcenterError && (
+              <p className="text-sm text-red-500">{vcenterError}</p>
+            )}
+
+            {issueVms.length > 0 && (
+              <Card className="space-y-4 border-destructive/60 bg-destructive/5 p-6">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <h2 className="text-lg font-semibold text-destructive">
+                    이슈 VM 감지
+                  </h2>
+                  <span className="text-xs text-muted-foreground">
+                    총 {issueVms.length}대의 VM에서 DOWN 또는 경고 상태가
+                    감지되었습니다.
+                  </span>
                 </div>
-                <div className="text-2xl font-bold mb-1">3건</div>
-                <p className="text-xs text-muted-foreground">
-                  지난 24시간 기준
-                </p>
+
+                <div className="space-y-2">
+                  {issueVms.map((vm, idx) => (
+                    <div
+                      key={vm.id ?? `${vm.name}-${idx}`}
+                      className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm"
+                    >
+                      <div>
+                        <div className="font-medium">{vm.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {vm.clusterName ?? "클러스터 미지정"} ·{" "}
+                          {vm.teamName ?? "팀 미지정"}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end text-xs">
+                        <span>
+                          CPU {vm.cpuCores} / MEM {vm.memoryGb}GB / DISK{" "}
+                          {vm.diskGb}GB
+                        </span>
+                        <span>OS: {vm.osName ?? "-"}</span>
+                        <span className="mt-1">
+                          상태:{" "}
+                          <span className="font-semibold text-destructive">
+                            {vm.powerState === "POWERED_OFF"
+                              ? "DOWN"
+                              : vm.alarmStatus}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </Card>
-            </div>
-          </Card>
+            )}
+          </div>
 
           {/* Prometheus / Grafana 탭 */}
-          <Tabs defaultValue="prometheus" className="space-y-6">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="prometheus">
-                Prometheus + Recharts
-              </TabsTrigger>
-              <TabsTrigger value="grafana">Grafana 임베드</TabsTrigger>
-            </TabsList>
+          <Card className="mt-8 p-6">
+            <h2 className="mb-2 text-2xl font-bold">리소스 모니터링</h2>
+            <p className="mb-6 text-sm text-muted-foreground">
+              Prometheus 메트릭 기반 차트와 Grafana 대시보드를 한 화면에서 전환하며 확인할 수 있습니다.
+            </p>
 
-            <TabsContent value="prometheus">
-              <PrometheusMonitoring />
-            </TabsContent>
+            <Tabs defaultValue="prometheus" className="space-y-6">
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="prometheus">
+                  Prometheus + Recharts
+                </TabsTrigger>
+                <TabsTrigger value="grafana">Grafana 임베드</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="grafana">
-              <GrafanaEmbed />
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="prometheus">
+                <PrometheusMonitoring />
+              </TabsContent>
 
-          {/* ✅ vCenter VM 목록 (실데이터) */}
-          <Card className="p-6 mt-8 space-y-4">
+              <TabsContent value="grafana">
+                <GrafanaEmbed />
+              </TabsContent>
+            </Tabs>
+          </Card>
+
+          {/* vCenter VM 전체 목록 (클릭 시 상세 모달) */}
+          <Card className="mt-8 space-y-4 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">vCenter VM 리소스 현황</h2>
               <Button
@@ -248,301 +549,192 @@ export default function AdminPage() {
               </Button>
             </div>
 
-            <VCenterVmTable />
+            {/* ✅ 클릭 핸들러 연결 */}
+            <VCenterVmTable onVmClick={handleVcenterVmClick} />
           </Card>
 
-          {/* DEMO: 기존 하드코딩 VM 리스트 + 상세 모달 */}
-          <Card className="p-6 mt-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">DEMO: 기존 VM 리스트</h2>
+          {/* DEMO VM 리스트 (클릭 시 간단 상세 + AI 분석) */}
+          <Card className="mt-8 space-y-4 p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">VM 리스트 (DEMO)</h2>
               <p className="text-xs text-muted-foreground">
-                (추후 vCenter VM 상세와 연동 가능)
+                카드 클릭 시 상세 모니터링 및 AI 이상징후 분석 실행
               </p>
             </div>
 
-            <div className="space-y-4">
-              {vmList.map((vm, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+            {vmLoading && (
+              <p className="text-sm text-muted-foreground">
+                VM 정보를 불러오는 중입니다...
+              </p>
+            )}
+            {vmError && (
+              <p className="text-sm text-red-500">{vmError}</p>
+            )}
+
+            {!vmLoading && !vmError && vmList.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                표시할 VM이 없습니다.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {vmList.map((vm, idx) => (
+                <button
+                  key={`${vm.name}-${idx}`}
+                  type="button"
+                  onClick={() => handleViewDetail(vm)}
+                  className="flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors hover:bg-muted/60"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold">{vm.name}</h3>
-                      {vm.status === "warning" && (
-                        <AlertCircle className="h-4 w-4 text-orange-500" />
-                      )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{vm.name}</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                        <Zap className="h-3 w-3" />
+                        {vm.status === "running"
+                          ? "정상"
+                          : vm.status === "warning"
+                          ? "주의"
+                          : "중지"}
+                      </span>
                     </div>
-                    <div className="flex gap-6 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Cpu className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">CPU:</span>
-                        <span
-                          className={
-                            vm.cpu > 80 ? "text-orange-500 font-medium" : ""
-                          }
-                        >
-                          {vm.cpu}%
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <HardDrive className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">메모리:</span>
-                        <span
-                          className={
-                            vm.memory > 85
-                              ? "text-orange-500 font-medium"
-                              : ""
-                          }
-                        >
-                          {vm.memory}%
-                        </span>
-                      </div>
-                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      CPU 사용률 {vm.cpu}% · 메모리 사용률 {vm.memory}%
+                    </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewDetail(vm)}
-                  >
-                    상세보기
-                  </Button>
-                </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Cpu className="h-3 w-3" />
+                      {vm.cpu}%
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Network className="h-3 w-3" />
+                      {vm.memory}%
+                    </span>
+                    <HardDrive className="h-4 w-4" />
+                  </div>
+                </button>
               ))}
             </div>
           </Card>
         </section>
       </main>
+
       <Footer />
 
-      {/* DEMO 상세 모달 */}
+      {/* DEMO VM 상세 모달 */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-2xl">
-              {selectedVM?.name} 상세 정보
+            <DialogTitle>
+              {selectedVM ? `${selectedVM.name} 상세 모니터링` : "VM 상세"}
             </DialogTitle>
             <DialogDescription>
-              실시간 리소스 사용 현황 및 상태
+              간단한 리소스 현황과 AI 이상징후 분석 결과를 확인할 수 있습니다.
             </DialogDescription>
           </DialogHeader>
 
           {selectedVM && (
-            <div className="space-y-6 py-4">
-              {/* Status Badge */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">상태:</span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    selectedVM.status === "running"
-                      ? "bg-green-100 text-green-700"
-                      : selectedVM.status === "warning"
-                      ? "bg-orange-100 text-orange-700"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
+            <div className="space-y-4">
+              <Card className="p-4">
+                <p className="text-sm font-medium">{selectedVM.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  상태:{" "}
                   {selectedVM.status === "running"
-                    ? "실행 중"
+                    ? "정상"
                     : selectedVM.status === "warning"
-                    ? "경고"
-                    : "정지"}
-                </span>
-              </div>
+                    ? "주의"
+                    : "중지"}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  CPU 사용률 {selectedVM.cpu}% · 메모리 사용률{" "}
+                  {selectedVM.memory}%
+                </p>
+              </Card>
 
-              {/* Resource Metrics */}
-              <div className="grid gap-4">
-                {/* CPU */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Cpu className="h-4 w-4 text-blue-500" />
-                      <span className="font-medium">CPU 사용률</span>
-                    </div>
-                    <span
-                      className={`font-bold ${
-                        selectedVM.cpu > 80 ? "text-orange-500" : ""
-                      }`}
-                    >
-                      {selectedVM.cpu}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all ${
-                        selectedVM.cpu > 80 ? "bg-orange-500" : "bg-blue-500"
-                      }`}
-                      style={{ width: `${selectedVM.cpu}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Memory */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <HardDrive className="h-4 w-4 text-purple-500" />
-                      <span className="font-medium">메모리 사용률</span>
-                    </div>
-                    <span
-                      className={`font-bold ${
-                        selectedVM.memory > 85 ? "text-orange-500" : ""
-                      }`}
-                    >
-                      {selectedVM.memory}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all ${
-                        selectedVM.memory > 85
-                          ? "bg-orange-500"
-                          : "bg-purple-500"
-                      }`}
-                      style={{ width: `${selectedVM.memory}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Disk */}
-                {selectedVM.disk !== undefined && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <HardDrive className="h-5 w-5 text-green-500" />
-                        <span className="font-medium">디스크 사용률</span>
-                      </div>
-                      <span className="font-bold">{selectedVM.disk}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 transition-all"
-                        style={{ width: `${selectedVM.disk}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Network */}
-                {selectedVM.network !== undefined && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Network className="h-5 w-5 text-orange-500" />
-                        <span className="font-medium">네트워크 트래픽</span>
-                      </div>
-                      <span className="font-bold">
-                        {selectedVM.network} MB/s
-                      </span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-orange-500 transition-all"
-                        style={{
-                          width: `${Math.min(
-                            (selectedVM.network / 500) * 100,
-                            100
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Additional Info */}
-              <div className="grid gap-3 p-4 bg-muted/50 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    가동 시간
-                  </span>
-                  <span className="font-medium">
-                    {selectedVM.uptime || "N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    마지막 업데이트
-                  </span>
-                  <span className="font-medium">
-                    {new Date().toLocaleString("ko-KR")}
-                  </span>
-                </div>
-              </div>
-
-              {/* 🔍 AI 기반 이상징후 분석 영역 */}
-              <div className="border rounded-lg p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">이상징후 분석</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleAnalyzeAnomaly}
-                    disabled={anomalyLoading}
-                  >
-                    {anomalyLoading ? "분석 중..." : "이 VM 분석하기"}
-                  </Button>
-                </div>
-
-                {anomalyError && (
-                  <p className="text-xs text-red-500 mt-1">
-                    {anomalyError}
-                  </p>
-                )}
-
-                {anomalyResult && (
-                  <div className="mt-2 space-y-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">결과:</span>
-                      <span
-                        className={
-                          anomalyResult.anomaly
-                            ? "text-red-600 font-semibold"
-                            : "text-green-600 font-semibold"
-                        }
-                      >
-                        {anomalyResult.anomaly
-                          ? "이상 징후 감지됨"
-                          : "정상"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="font-medium">심각도: </span>
-                      <span>{anomalyResult.severity}</span>
-                    </div>
-                    <div>
-                      <span className="font-medium">Score: </span>
-                      <span>{anomalyResult.score.toFixed(2)}</span>
-                    </div>
-                    {anomalyResult.summary && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {anomalyResult.summary}
-                      </p>
-                    )}
-                    {anomalyResult.explanation && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {anomalyResult.explanation}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {!anomalyResult && !anomalyLoading && !anomalyError && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    이 VM에 대해 AI 기반 이상징후 분석을 실행할 수 있습니다.
-                  </p>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 justify-end pt-4">
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  variant="outline"
-                  onClick={() => setIsDetailOpen(false)}
+                  size="sm"
+                  onClick={handleAnalyzeAnomaly}
+                  disabled={anomalyLoading}
                 >
-                  닫기
+                  {anomalyLoading ? "분석 중..." : "AI 이상징후 분석"}
                 </Button>
-                <Button variant="default">상세 모니터링</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenDetailMonitoring}
+                >
+                  Grafana 상세 대시보드 열기
+                </Button>
               </div>
+
+              {anomalyError && (
+                <p className="text-xs text-red-500">{anomalyError}</p>
+              )}
+
+              {anomalyResult && (
+                <Card className="max-h-60 overflow-auto bg-muted p-3 text-xs">
+                  <pre className="whitespace-pre-wrap">
+                    {JSON.stringify(anomalyResult, null, 2)}
+                  </pre>
+                </Card>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ vCenter VM 상세 모달 */}
+      <Dialog
+        open={isVcenterDetailOpen}
+        onOpenChange={setIsVcenterDetailOpen}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedVcenterVm
+                ? `${selectedVcenterVm.name} (vCenter) 상세`
+                : "vCenter VM 상세"}
+            </DialogTitle>
+            <DialogDescription>
+              vCenter 메타데이터와 Grafana 대시보드를 통해 상세 모니터링을 확인할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedVcenterVm && (
+            <div className="space-y-4 text-sm">
+              <Card className="p-4 space-y-1">
+                <p>
+                  <span className="font-medium">VM ID: </span>
+                  <span className="font-mono text-xs">
+                    {selectedVcenterVm.vmId}
+                  </span>
+                </p>
+                <p>
+                  <span className="font-medium">이름: </span>
+                  {selectedVcenterVm.name}
+                </p>
+                <p>
+                  <span className="font-medium">전원 상태: </span>
+                  {selectedVcenterVm.powerState}
+                </p>
+                <p>
+                  <span className="font-medium">vCPU: </span>
+                  {selectedVcenterVm.cpuCount}
+                </p>
+                <p>
+                  <span className="font-medium">메모리: </span>
+                  {formatMemoryGiB(selectedVcenterVm.memorySizeMiB)}
+                </p>
+              </Card>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openVcenterGrafana(selectedVcenterVm)}
+              >
+                Grafana 상세 대시보드 열기
+              </Button>
             </div>
           )}
         </DialogContent>

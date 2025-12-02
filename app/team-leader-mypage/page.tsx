@@ -1,123 +1,70 @@
+// app/team-leader-mypage/page.tsx
 "use client"
+
+import { useEffect, useState } from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Server, CheckCircle2, Clock, AlertCircle, Users, CheckCircle, ChevronDown, Package } from "lucide-react"
+import {
+  Server,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Users,
+  CheckCircle,
+  ChevronDown,
+  Package,
+} from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { apiClient } from "@/lib/api/base-client"
+import type { ApiResponse, MyPageVm } from "@/types/mypage"
+import type { TeamLeaderMyPageData } from "@/types/mypage-leader"
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 
 export default function TeamLeaderMyPage() {
   const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set())
+  const [data, setData] = useState<TeamLeaderMyPageData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [selectedVm, setSelectedVm] = useState<MyPageVm | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const toggleServerDetails = (serverId: number) => {
     const newExpanded = new Set(expandedServers)
-    if (newExpanded.has(serverId)) {
-      newExpanded.delete(serverId)
-    } else {
-      newExpanded.add(serverId)
-    }
+    if (newExpanded.has(serverId)) newExpanded.delete(serverId)
+    else newExpanded.add(serverId)
     setExpandedServers(newExpanded)
   }
 
-  const teamLeaderInfo = {
-    name: "이팀장",
-    employeeId: "TL-2024-001",
-    department: "개발본부",
-    team: "A팀",
-    role: "팀장",
-  }
+  useEffect(() => {
+    const fetchLeaderMyPage = async () => {
+      try {
+        setLoading(true)
+        const res = await apiClient.get<ApiResponse<TeamLeaderMyPageData>>("/mypage/leader")
+        console.log("[TeamLeaderMyPage] /mypage/leader 응답:", res.data)
+        setData(res.data.data)
+      } catch (err: any) {
+        console.error("[TeamLeaderMyPage] /mypage/leader 오류:", err?.response ?? err)
+        setError("마이페이지 정보를 불러오지 못했습니다.")
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  const teamMembers = [
-    {
-      teamMember: "홍길동 (EMP-2024-001)",
-      servers: [
-        {
-          id: 1,
-          name: "web-server-01",
-          type: "퍼블릭",
-          status: "running",
-          cpu: "2 vCPU",
-          memory: "4GB",
-          storage: "50GB",
-          os: "Ubuntu 22.04",
-          createdAt: "2024-01-15",
-          ipAddress: "192.168.1.10",
-          packages: ["nginx", "nodejs", "pm2"],
-          lastUpdated: "2024-01-20 14:30",
-        },
-        {
-          id: 2,
-          name: "db-server-01",
-          type: "프라이빗",
-          status: "running",
-          cpu: "4 vCPU",
-          memory: "8GB",
-          storage: "100GB",
-          os: "CentOS 8",
-          createdAt: "2024-01-10",
-          ipAddress: "10.0.1.20",
-          packages: ["postgresql", "redis"],
-          lastUpdated: "2024-01-19 10:15",
-        },
-      ],
-    },
-    {
-      teamMember: "이영희 (EMP-2024-002)",
-      servers: [
-        {
-          id: 3,
-          name: "api-server-01",
-          type: "퍼블릭",
-          status: "running",
-          cpu: "4 vCPU",
-          memory: "8GB",
-          storage: "80GB",
-          os: "Ubuntu 22.04",
-          createdAt: "2024-01-12",
-          ipAddress: "192.168.1.15",
-          packages: ["docker", "kubernetes", "helm"],
-          lastUpdated: "2024-01-21 09:00",
-        },
-        {
-          id: 4,
-          name: "test-server-01",
-          type: "프라이빗",
-          status: "stopped",
-          cpu: "2 vCPU",
-          memory: "4GB",
-          storage: "40GB",
-          os: "Ubuntu 20.04",
-          createdAt: "2024-01-08",
-          ipAddress: "10.0.1.25",
-          packages: ["git", "jenkins"],
-          lastUpdated: "2024-01-18 11:20",
-        },
-      ],
-    },
-    {
-      teamMember: "김민지 (EMP-2024-003)",
-      servers: [
-        {
-          id: 5,
-          name: "cache-server-01",
-          type: "프라이빗",
-          status: "running",
-          cpu: "2 vCPU",
-          memory: "8GB",
-          storage: "50GB",
-          os: "Ubuntu 22.04",
-          createdAt: "2024-01-14",
-          ipAddress: "10.0.1.30",
-          packages: ["redis", "memcached"],
-          lastUpdated: "2024-01-20 16:45",
-        },
-      ],
-    },
-  ]
+    fetchLeaderMyPage()
+  }, [])
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: MyPageVm["status"]) => {
     switch (status) {
       case "running":
         return <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -130,7 +77,7 @@ export default function TeamLeaderMyPage() {
     }
   }
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: MyPageVm["status"]) => {
     switch (status) {
       case "running":
         return "실행 중"
@@ -142,6 +89,60 @@ export default function TeamLeaderMyPage() {
         return status
     }
   }
+
+  const formatDateTime = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleString("ko-KR") : "-"
+
+  const openGrafanaForVm = (vmName: string) => {
+    const base =
+      process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000"
+    const uid =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail"
+    const slug =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail"
+
+    const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
+      vmName,
+    )}`
+
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
+  // 🔄 로딩 상태
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">🔄 마이페이지 정보를 불러오는 중입니다...</p>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  // ❌ 에러 또는 데이터 없음
+  if (error || !data) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-destructive">{error ?? "마이페이지 정보를 불러오지 못했습니다."}</p>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  const teamLeaderInfo = {
+    name: data.leaderName,
+    employeeId: data.leaderEmployeeId,
+    department: data.department,
+    team: data.teamName,
+    role: data.roleName,
+  }
+
+  const teamMembers = data.members
 
   const totalServers = teamMembers.reduce((acc, member) => acc + member.servers.length, 0)
   const runningServers = teamMembers.reduce(
@@ -155,88 +156,59 @@ export default function TeamLeaderMyPage() {
 
       <main className="flex-1">
         <div className="container px-4 py-8 md:px-6">
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="rounded-xl bg-primary/10 p-3">
-                <Users className="h-8 w-8 text-primary" />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">팀장 마이페이지</h1>
-            </div>
-            <p className="text-muted-foreground">{teamLeaderInfo.team} 팀원들의 가상머신을 관리하세요</p>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-4 mb-6">
+          {/* 상단 요약부는 그대로 (생략 가능) */}
+          <div className="mb-6 grid gap-6 lg:grid-cols-4">
             <Card className="p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
                 팀장 정보
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-2 text-sm">
                 <div>
-                  <p className="text-sm text-muted-foreground">이름</p>
+                  <p className="text-muted-foreground">이름</p>
                   <p className="font-medium">{teamLeaderInfo.name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">사번</p>
+                  <p className="text-muted-foreground">사번</p>
                   <p className="font-medium">{teamLeaderInfo.employeeId}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">팀</p>
-                  <Badge variant="default">{teamLeaderInfo.team}</Badge>
+                  <p className="text-muted-foreground">부서 / 팀</p>
+                  <p className="font-medium">
+                    {teamLeaderInfo.department} / {teamLeaderInfo.team}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">직급</p>
+                  <p className="text-muted-foreground">역할</p>
                   <Badge variant="secondary">{teamLeaderInfo.role}</Badge>
                 </div>
               </div>
             </Card>
 
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="rounded-lg bg-blue-100 p-2">
-                  <Server className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">팀 전체 서버</p>
-                  <p className="text-2xl font-bold">{totalServers}</p>
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground mb-1">팀 전체 서버 수</p>
+              <p className="text-2xl font-bold">{totalServers}</p>
             </Card>
 
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="rounded-lg bg-green-100 p-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">실행 중</p>
-                  <p className="text-2xl font-bold">{runningServers}</p>
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground mb-1">실행 중 서버</p>
+              <p className="text-2xl font-bold">{runningServers}</p>
             </Card>
 
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="rounded-lg bg-purple-100 p-2">
-                  <Users className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">팀원</p>
-                  <p className="text-2xl font-bold">{teamMembers.length}</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          <div className="mb-6">
-            <Link href="/team-leader-approval">
-              <Button size="lg" className="w-full md:w-auto gap-2 bg-green-600 hover:bg-green-700">
-                <CheckCircle className="h-5 w-5" />
+            <Card className="p-6 flex flex-col justify-between">
+              <p className="text-sm text-muted-foreground mb-2">
                 패키지 승인 관리
-              </Button>
-            </Link>
+              </p>
+              <Link href="/leader-approval">
+                <Button className="w-full gap-2">
+                  <CheckCircle className="h-5 w-5" />
+                  팀 패키지 승인 페이지
+                </Button>
+              </Link>
+            </Card>
           </div>
 
+          {/* 아래 VM 리스트 부분 */}
           <div className="space-y-6">
             {teamMembers.map((member, memberIndex) => (
               <Card key={memberIndex} className="p-6">
@@ -266,12 +238,14 @@ export default function TeamLeaderMyPage() {
                                 <span className="text-xs px-2 py-1 rounded-full bg-muted">{vm.type}</span>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                <div>CPU: {vm.cpu}</div>
-                                <div>메모리: {vm.memory}</div>
-                                <div>스토리지: {vm.storage}</div>
-                                <div>OS: {vm.os}</div>
+                                <div>CPU: {vm.cpu ?? "-"} vCPU</div>
+                                <div>메모리: {vm.memory ?? "-"} GB</div>
+                                <div>스토리지: {vm.storage ?? "-"} GB</div>
+                                <div>OS: {vm.os || "-"}</div>
                               </div>
-                              <p className="text-xs text-muted-foreground">생성일: {vm.createdAt}</p>
+                              <p className="text-xs text-muted-foreground">
+                                생성일: {formatDateTime(vm.createdAt)}
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -299,7 +273,7 @@ export default function TeamLeaderMyPage() {
                             </div>
                             <div>
                               <p className="text-muted-foreground mb-1">마지막 업데이트</p>
-                              <p className="font-medium">{vm.lastUpdated}</p>
+                              <p className="font-medium">{formatDateTime(vm.lastUpdated)}</p>
                             </div>
                             <div className="col-span-2">
                               <p className="text-muted-foreground mb-2">설치된 패키지</p>
@@ -312,6 +286,20 @@ export default function TeamLeaderMyPage() {
                               </div>
                             </div>
                           </div>
+
+                          {/* 🔹 Grafana 상세 모니터링 버튼 */}
+                          <div className="mt-4 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedVm(vm)
+                                setDetailOpen(true)
+                              }}
+                            >
+                              Grafana 상세 모니터링
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -322,6 +310,67 @@ export default function TeamLeaderMyPage() {
           </div>
         </div>
       </main>
+
+      {/* 🔹 Grafana 상세 모달 */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedVm ? `${selectedVm.name} 상세 모니터링` : "VM 상세"}
+            </DialogTitle>
+            <DialogDescription>
+              VM 스펙과 네트워크 정보를 확인하고 Grafana 대시보드로 이동할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedVm && (
+            <div className="space-y-4 text-sm">
+              <Card className="p-4 space-y-1">
+                <p>
+                  <span className="font-medium">이름: </span>
+                  {selectedVm.name}
+                </p>
+                <p>
+                  <span className="font-medium">타입: </span>
+                  {selectedVm.type}
+                </p>
+                <p>
+                  <span className="font-medium">CPU: </span>
+                  {selectedVm.cpu ?? "-"} vCPU
+                </p>
+                <p>
+                  <span className="font-medium">메모리: </span>
+                  {selectedVm.memory ?? "-"} GB
+                </p>
+                <p>
+                  <span className="font-medium">스토리지: </span>
+                  {selectedVm.storage ?? "-"} GB
+                </p>
+                <p>
+                  <span className="font-medium">OS: </span>
+                  {selectedVm.os || "-"}
+                </p>
+                <p>
+                  <span className="font-medium">IP: </span>
+                  {selectedVm.ipAddress || "-"}
+                </p>
+                <p>
+                  <span className="font-medium">생성일: </span>
+                  {formatDateTime(selectedVm.createdAt)}
+                </p>
+              </Card>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openGrafanaForVm(selectedVm.name)}
+              >
+                Grafana 상세 대시보드 열기
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>
