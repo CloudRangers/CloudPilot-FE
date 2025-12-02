@@ -1,7 +1,7 @@
 export function Footer() {
   return (
     <footer className="border-t border-border bg-muted/30">
-      <div className="container px-4 py-8 md:px-6">
+      <div className="container mx-auto px-4 py-8 md:px-6">
         <div className="grid gap-8 md:grid-cols-3">
           <div className="space-y-3">
             <h3 className="text-sm font-semibold">Cloud Pilot</h3>

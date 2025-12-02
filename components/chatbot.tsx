@@ -5,35 +5,26 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MessageCircle, X, Send, AlertCircle } from "lucide-react"
 
-interface ChatMessage {
+export interface ChatMessage {
   text: string
   isBot: boolean
 }
 
 interface ChatbotProps {
-  initialMessages?: ChatMessage[]
+  messages: ChatMessage[]
+  onSendMessage: (messageText: string) => void
   hasError?: boolean
   onErrorChange?: (hasError: boolean) => void
 }
 
-export function Chatbot({ initialMessages, hasError = false, onErrorChange }: ChatbotProps) {
+export function Chatbot({ messages, onSendMessage, hasError = false, onErrorChange }: ChatbotProps) {
   const [chatOpen, setChatOpen] = useState(false)
   const [chatMessage, setChatMessage] = useState("")
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
-    initialMessages || [{ text: "안녕하세요! Cloud Pilot 도우미입니다. 무엇을 도와드릴까요?", isBot: true }],
-  )
 
   const handleSendMessage = () => {
     if (chatMessage.trim()) {
-      setChatMessages((prev) => [...prev, { text: chatMessage, isBot: false }])
+      onSendMessage(chatMessage);
       setChatMessage("")
-
-      setTimeout(() => {
-        setChatMessages((prev) => [
-          ...prev,
-          { text: "문의 주셔서 감사합니다. 관리자가 곧 답변드리겠습니다.", isBot: true },
-        ])
-      }, 1000)
     }
   }
 
@@ -59,7 +50,7 @@ export function Chatbot({ initialMessages, hasError = false, onErrorChange }: Ch
           </div>
 
           <div className="flex-1 p-4 overflow-y-auto space-y-3">
-            {chatMessages.map((msg, index) => (
+            {messages.map((msg, index) => (
               <div
                 key={index}
                 className={`rounded-lg p-3 text-sm whitespace-pre-line ${
@@ -69,24 +60,6 @@ export function Chatbot({ initialMessages, hasError = false, onErrorChange }: Ch
                 <p>{msg.text}</p>
               </div>
             ))}
-          </div>
-
-          <div className="p-4 border-t border-border">
-            <div className="flex gap-2">
-              <Input
-                placeholder="메시지를 입력하세요..."
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSendMessage()
-                  }
-                }}
-              />
-              <Button size="icon" onClick={handleSendMessage}>
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
         </div>
       ) : (
