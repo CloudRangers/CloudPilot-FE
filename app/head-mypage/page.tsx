@@ -1,10 +1,18 @@
+// app/head-mypage/page.tsx
 "use client"
+
+import { useEffect, useState } from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   Server,
   CheckCircle2,
@@ -17,197 +25,144 @@ import {
   Package,
 } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { apiClient } from "@/lib/api/base-client"
+
+// 공통 마이페이지 타입 (VM 타입 포함)
+import type { ApiResponse, MyPageVm } from "@/types/mypage"
+// 부장용 마이페이지 타입
+import type { HeadMyPageData } from "@/types/mypage-head"
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 
 export default function HeadMyPage() {
   const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set())
+  const [data, setData] = useState<HeadMyPageData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [selectedVm, setSelectedVm] = useState<MyPageVm | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const toggleServerDetails = (serverId: number) => {
-    const newExpanded = new Set(expandedServers)
-    if (newExpanded.has(serverId)) {
-      newExpanded.delete(serverId)
+    const next = new Set(expandedServers)
+    if (next.has(serverId)) {
+      next.delete(serverId)
     } else {
-      newExpanded.add(serverId)
+      next.add(serverId)
     }
-    setExpandedServers(newExpanded)
+    setExpandedServers(next)
   }
 
-  const managerInfo = {
-    name: "김부장",
-    employeeId: "MGR-2024-001",
-    department: "개발본부",
-    role: "부장",
-  }
+  useEffect(() => {
+    const fetchHeadMyPage = async () => {
+      try {
+        setLoading(true)
+        setError(null)
 
-  const allTeamsServers = [
-    {
-      teamName: "A팀",
-      teamLeader: "이팀장 (TL-2024-001)",
-      members: [
-        {
-          teamMember: "홍길동 (EMP-2024-001)",
-          servers: [
-            {
-              id: 1,
-              name: "web-server-01",
-              type: "퍼블릭",
-              status: "running",
-              cpu: "2 vCPU",
-              memory: "4GB",
-              storage: "50GB",
-              os: "Ubuntu 22.04",
-              createdAt: "2024-01-15",
-              ipAddress: "192.168.1.10",
-              packages: ["nginx", "nodejs", "pm2"],
-              lastUpdated: "2024-01-20 14:30",
-            },
-            {
-              id: 2,
-              name: "db-server-01",
-              type: "프라이빗",
-              status: "running",
-              cpu: "4 vCPU",
-              memory: "8GB",
-              storage: "100GB",
-              os: "CentOS 8",
-              createdAt: "2024-01-10",
-              ipAddress: "10.0.1.20",
-              packages: ["postgresql", "redis"],
-              lastUpdated: "2024-01-19 10:15",
-            },
-          ],
-        },
-        {
-          teamMember: "이영희 (EMP-2024-002)",
-          servers: [
-            {
-              id: 3,
-              name: "api-server-01",
-              type: "퍼블릭",
-              status: "running",
-              cpu: "4 vCPU",
-              memory: "8GB",
-              storage: "80GB",
-              os: "Ubuntu 22.04",
-              createdAt: "2024-01-12",
-              ipAddress: "192.168.1.15",
-              packages: ["docker", "kubernetes", "helm"],
-              lastUpdated: "2024-01-21 09:00",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      teamName: "B팀",
-      teamLeader: "박팀장 (TL-2024-002)",
-      members: [
-        {
-          teamMember: "박철수 (EMP-2024-003)",
-          servers: [
-            {
-              id: 4,
-              name: "cache-server-01",
-              type: "프라이빗",
-              status: "running",
-              cpu: "2 vCPU",
-              memory: "8GB",
-              storage: "50GB",
-              os: "Ubuntu 22.04",
-              createdAt: "2024-01-14",
-              ipAddress: "10.0.2.10",
-              packages: ["redis", "memcached"],
-              lastUpdated: "2024-01-20 16:45",
-            },
-            {
-              id: 5,
-              name: "test-server-01",
-              type: "프라이빗",
-              status: "stopped",
-              cpu: "2 vCPU",
-              memory: "4GB",
-              storage: "40GB",
-              os: "Ubuntu 20.04",
-              createdAt: "2024-01-08",
-              ipAddress: "10.0.2.15",
-              packages: ["jenkins", "git"],
-              lastUpdated: "2024-01-18 11:20",
-            },
-          ],
-        },
-        {
-          teamMember: "최민수 (EMP-2024-004)",
-          servers: [
-            {
-              id: 6,
-              name: "monitoring-server-01",
-              type: "퍼블릭",
-              status: "running",
-              cpu: "2 vCPU",
-              memory: "4GB",
-              storage: "60GB",
-              os: "Ubuntu 22.04",
-              createdAt: "2024-01-16",
-              ipAddress: "192.168.1.25",
-              packages: ["prometheus", "grafana", "alertmanager"],
-              lastUpdated: "2024-01-21 08:30",
-            },
-          ],
-        },
-      ],
-    },
-    {
-      teamName: "C팀",
-      teamLeader: "정팀장 (TL-2024-003)",
-      members: [
-        {
-          teamMember: "강지훈 (EMP-2024-005)",
-          servers: [
-            {
-              id: 7,
-              name: "backup-server-01",
-              type: "프라이빗",
-              status: "running",
-              cpu: "4 vCPU",
-              memory: "16GB",
-              storage: "200GB",
-              os: "CentOS 8",
-              createdAt: "2024-01-13",
-              ipAddress: "10.0.3.10",
-              packages: ["rsync", "bacula"],
-              lastUpdated: "2024-01-20 22:00",
-            },
-          ],
-        },
-      ],
-    },
-  ]
+        const res = await apiClient.get<ApiResponse<HeadMyPageData>>("/mypage/head")
+        console.log("[HeadMyPage] /mypage/head 응답:", res.data)
+        setData(res.data.data)
+      } catch (err: any) {
+        console.error("[HeadMyPage] /mypage/head 오류:", err?.response ?? err)
+        setError("마이페이지 정보를 불러오지 못했습니다.")
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "running":
+    fetchHeadMyPage()
+  }, [])
+
+  // 🔹 status 값이 RUNNING / running 둘 다 올 수 있으니까 대문자로 통일해서 비교
+  const getStatusIcon = (status: MyPageVm["status"]) => {
+    const upper = (status ?? "").toString().toUpperCase()
+    switch (upper) {
+      case "RUNNING":
         return <CheckCircle2 className="h-5 w-5 text-green-500" />
-      case "stopped":
+      case "STOPPED":
         return <AlertCircle className="h-5 w-5 text-gray-400" />
-      case "pending":
+      case "PENDING":
         return <Clock className="h-5 w-5 text-yellow-500" />
       default:
         return null
     }
   }
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "running":
+  const getStatusText = (status: MyPageVm["status"]) => {
+    const upper = (status ?? "").toString().toUpperCase()
+    switch (upper) {
+      case "RUNNING":
         return "실행 중"
-      case "stopped":
+      case "STOPPED":
         return "중지됨"
-      case "pending":
+      case "PENDING":
         return "대기 중"
       default:
         return status
     }
   }
+
+  // 날짜 포맷 간단 정리용 헬퍼
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "-"
+    return value.replace("T", " ")
+  }
+
+  const openGrafanaForVm = (vmName: string) => {
+    const base =
+      process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000"
+    const uid =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail"
+    const slug =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail"
+
+    const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
+      vmName,
+    )}`
+
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
+  // 🔄 로딩 상태
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">🔄 마이페이지 정보를 불러오는 중입니다...</p>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  // ❌ 에러 또는 데이터 없음
+  if (error || !data) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-destructive">{error ?? "데이터가 없습니다."}</p>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  const managerInfo = {
+    name: data.managerName,
+    employeeId: data.managerEmployeeId,
+    department: data.department,
+    role: data.roleName,
+  }
+
+  const allTeamsServers = data.teams
 
   const totalServers = allTeamsServers.reduce(
     (acc, team) => acc + team.members.reduce((sum, member) => sum + member.servers.length, 0),
@@ -215,7 +170,14 @@ export default function HeadMyPage() {
   )
   const runningServers = allTeamsServers.reduce(
     (acc, team) =>
-      acc + team.members.reduce((sum, member) => sum + member.servers.filter((s) => s.status === "running").length, 0),
+      acc +
+      team.members.reduce(
+        (sum, member) =>
+          sum +
+          member.servers.filter((s) => (s.status ?? "").toString().toUpperCase() === "RUNNING")
+            .length,
+        0,
+      ),
     0,
   )
   const totalMembers = allTeamsServers.reduce((acc, team) => acc + team.members.length, 0)
@@ -226,6 +188,7 @@ export default function HeadMyPage() {
 
       <main className="flex-1">
         <div className="container px-4 py-8 md:px-6">
+          {/* 상단 타이틀 + 요약 카드들 */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="rounded-xl bg-primary/10 p-3">
@@ -233,10 +196,13 @@ export default function HeadMyPage() {
               </div>
               <h1 className="text-3xl font-bold tracking-tight">부장 마이페이지</h1>
             </div>
-            <p className="text-muted-foreground">모든 팀의 가상머신을 관리하고 패키지 승인을 처리하세요</p>
+            <p className="text-muted-foreground">
+              모든 팀의 가상머신을 관리하고 패키지 승인을 처리하세요
+            </p>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-4 mb-6">
+            {/* 관리자 정보 */}
             <Card className="p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" />
@@ -262,6 +228,7 @@ export default function HeadMyPage() {
               </div>
             </Card>
 
+            {/* 전체 서버 수 */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-2">
                 <div className="rounded-lg bg-blue-100 p-2">
@@ -274,6 +241,7 @@ export default function HeadMyPage() {
               </div>
             </Card>
 
+            {/* 실행 중 서버 수 */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-2">
                 <div className="rounded-lg bg-green-100 p-2">
@@ -286,6 +254,7 @@ export default function HeadMyPage() {
               </div>
             </Card>
 
+            {/* 전체 팀원 수 */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-2">
                 <div className="rounded-lg bg-purple-100 p-2">
@@ -299,6 +268,7 @@ export default function HeadMyPage() {
             </Card>
           </div>
 
+          {/* 패키지 승인 관리 버튼 */}
           <div className="mb-6">
             <Link href="/head-approval">
               <Button size="lg" className="w-full md:w-auto gap-2 bg-green-600 hover:bg-green-700">
@@ -308,6 +278,7 @@ export default function HeadMyPage() {
             </Link>
           </div>
 
+          {/* 팀/팀원/VM 아코디언 */}
           <Accordion type="multiple" className="space-y-4">
             {allTeamsServers.map((team, teamIndex) => (
               <AccordionItem key={teamIndex} value={`team-${teamIndex}`} className="border-2 rounded-lg">
@@ -318,7 +289,9 @@ export default function HeadMyPage() {
                         <Shield className="h-6 w-6 text-primary" />
                         <div className="text-left">
                           <h2 className="text-2xl font-bold">{team.teamName}</h2>
-                          <p className="text-sm text-muted-foreground mt-1">팀장: {team.teamLeader}</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            팀장: {team.teamLeader}
+                          </p>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -331,6 +304,7 @@ export default function HeadMyPage() {
                       </div>
                     </div>
                   </AccordionTrigger>
+
                   <AccordionContent className="px-6 pb-6">
                     <div className="space-y-6 pt-4">
                       {team.members.map((member, memberIndex) => (
@@ -340,12 +314,15 @@ export default function HeadMyPage() {
                               <Users className="h-5 w-5 text-muted-foreground" />
                               {member.teamMember}
                             </h3>
-                            <Badge variant="outline">{member.servers.length}개 서버</Badge>
+                            <Badge variant="outline">
+                              {member.servers.length}개 서버
+                            </Badge>
                           </div>
 
                           <div className="space-y-3">
                             {member.servers.map((vm) => (
                               <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
+                                {/* 상단 요약 행 */}
                                 <div
                                   className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
                                   onClick={() => toggleServerDetails(vm.id)}
@@ -358,20 +335,29 @@ export default function HeadMyPage() {
                                       <div className="flex-1 space-y-2">
                                         <div className="flex items-center gap-2">
                                           <h4 className="font-semibold">{vm.name}</h4>
-                                          <span className="text-xs px-2 py-1 rounded-full bg-muted">{vm.type}</span>
+                                          <span className="text-xs px-2 py-1 rounded-full bg-muted">
+                                            {vm.type}
+                                          </span>
                                         </div>
+
                                         <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                          <div>CPU: {vm.cpu}</div>
-                                          <div>메모리: {vm.memory}</div>
-                                          <div>스토리지: {vm.storage}</div>
+                                          <div>CPU: {vm.cpu} vCPU</div>
+                                          <div>메모리: {vm.memory} GB</div>
+                                          <div>스토리지: {vm.storage} GB</div>
                                           <div>OS: {vm.os}</div>
                                         </div>
-                                        <p className="text-xs text-muted-foreground">생성일: {vm.createdAt}</p>
+
+                                        <p className="text-xs text-muted-foreground">
+                                          생성일: {formatDateTime(vm.createdAt)}
+                                        </p>
                                       </div>
                                     </div>
+
                                     <div className="flex items-center gap-2">
                                       {getStatusIcon(vm.status)}
-                                      <span className="text-sm font-medium">{getStatusText(vm.status)}</span>
+                                      <span className="text-sm font-medium">
+                                        {getStatusText(vm.status)}
+                                      </span>
                                       <ChevronDown
                                         className={`h-4 w-4 transition-transform ${
                                           expandedServers.has(vm.id) ? "rotate-180" : ""
@@ -381,6 +367,7 @@ export default function HeadMyPage() {
                                   </div>
                                 </div>
 
+                                {/* 펼친 상세 영역 */}
                                 {expandedServers.has(vm.id) && (
                                   <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
                                     <h5 className="font-semibold mb-3 flex items-center gap-2">
@@ -390,22 +377,50 @@ export default function HeadMyPage() {
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                       <div>
                                         <p className="text-muted-foreground mb-1">IP 주소</p>
-                                        <p className="font-medium">{vm.ipAddress}</p>
+                                        <p className="font-medium">
+                                          {vm.ipAddress || "-"}
+                                        </p>
                                       </div>
                                       <div>
                                         <p className="text-muted-foreground mb-1">마지막 업데이트</p>
-                                        <p className="font-medium">{vm.lastUpdated}</p>
+                                        <p className="font-medium">
+                                          {formatDateTime(vm.lastUpdated)}
+                                        </p>
                                       </div>
                                       <div className="col-span-2">
                                         <p className="text-muted-foreground mb-2">설치된 패키지</p>
                                         <div className="flex flex-wrap gap-2">
-                                          {vm.packages.map((pkg, idx) => (
-                                            <Badge key={idx} variant="secondary" className="text-xs">
-                                              {pkg}
-                                            </Badge>
-                                          ))}
+                                          {vm.packages && vm.packages.length > 0 ? (
+                                            vm.packages.map((pkg, idx) => (
+                                              <Badge
+                                                key={idx}
+                                                variant="secondary"
+                                                className="text-xs"
+                                              >
+                                                {pkg}
+                                              </Badge>
+                                            ))
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground">
+                                              등록된 패키지가 없습니다.
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
+                                    </div>
+
+                                    {/* 🔹 Grafana 상세 모니터링 버튼 */}
+                                    <div className="mt-4 flex justify-end">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setSelectedVm(vm)
+                                          setDetailOpen(true)
+                                        }}
+                                      >
+                                        Grafana 상세 모니터링
+                                      </Button>
                                     </div>
                                   </div>
                                 )}
@@ -422,6 +437,67 @@ export default function HeadMyPage() {
           </Accordion>
         </div>
       </main>
+
+      {/* 🔹 Grafana 상세 모달 */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedVm ? `${selectedVm.name} 상세 모니터링` : "VM 상세"}
+            </DialogTitle>
+            <DialogDescription>
+              VM 스펙과 네트워크 정보를 확인하고 Grafana 대시보드로 이동할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedVm && (
+            <div className="space-y-4 text-sm">
+              <Card className="p-4 space-y-1">
+                <p>
+                  <span className="font-medium">이름: </span>
+                  {selectedVm.name}
+                </p>
+                <p>
+                  <span className="font-medium">타입: </span>
+                  {selectedVm.type}
+                </p>
+                <p>
+                  <span className="font-medium">CPU: </span>
+                  {selectedVm.cpu ?? "-"} vCPU
+                </p>
+                <p>
+                  <span className="font-medium">메모리: </span>
+                  {selectedVm.memory ?? "-"} GB
+                </p>
+                <p>
+                  <span className="font-medium">스토리지: </span>
+                  {selectedVm.storage ?? "-"} GB
+                </p>
+                <p>
+                  <span className="font-medium">OS: </span>
+                  {selectedVm.os || "-"}
+                </p>
+                <p>
+                  <span className="font-medium">IP: </span>
+                  {selectedVm.ipAddress || "-"}
+                </p>
+                <p>
+                  <span className="font-medium">생성일: </span>
+                  {formatDateTime(selectedVm.createdAt)}
+                </p>
+              </Card>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openGrafanaForVm(selectedVm.name)}
+              >
+                Grafana 상세 대시보드 열기
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>

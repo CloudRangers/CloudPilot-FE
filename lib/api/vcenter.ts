@@ -1,15 +1,5 @@
 // src/lib/api/vcenter.ts
-import axios from "axios";
-
-const VCENTER_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-
-const vcenterClient = axios.create({
-  baseURL: VCENTER_API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+import { apiClient } from "./base-client";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -18,7 +8,6 @@ export interface ApiResponse<T> {
 }
 
 // 🔹 BE 요약 응답 DTO랑 1:1로 맞추기
-//  totalVms, poweredOn, poweredOff, suspended, unknown
 export interface VCenterSummary {
   totalVms: number;
   poweredOn: number;
@@ -27,7 +16,7 @@ export interface VCenterSummary {
   unknown: number;
 }
 
-// 🔹 VM 리스트는 camelCase 기준 (지금 BE DTO에 맞게)
+// 🔹 VM 리스트 DTO
 export interface VCenterVm {
   vmId: string;
   name: string;
@@ -37,17 +26,21 @@ export interface VCenterVm {
 }
 
 export const vcenterApi = {
-  getAllVms: async () => {
-    const res = await vcenterClient.get<ApiResponse<VCenterVm[]>>(
-      "/monitor/vcenter/vms"
+  // ✅ teamId 옵션 추가
+  getAllVms: async (teamId?: number) => {
+    const res = await apiClient.get<ApiResponse<VCenterVm[]>>(
+      "/monitor/vcenter/vms",
+      teamId != null ? { params: { teamId } } : undefined,
     );
-    return res.data;
+    return res.data; // { success, data, message }
   },
 
-  getSummary: async () => {
-    const res = await vcenterClient.get<ApiResponse<VCenterSummary>>(
-      "/monitor/vcenter/summary"
+  // ✅ teamId 옵션 추가
+  getSummary: async (teamId?: number) => {
+    const res = await apiClient.get<ApiResponse<VCenterSummary>>(
+      "/monitor/vcenter/summary",
+      teamId != null ? { params: { teamId } } : undefined,
     );
-    return res.data;
+    return res.data; // { success, data, message }
   },
 };
