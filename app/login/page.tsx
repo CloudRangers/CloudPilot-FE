@@ -57,7 +57,7 @@ export default function LoginPage() {
       const result: LoginApiResponse<LoginResponseDto> = await res.json();
 
       if (!result.success) {
-        toast({ // ⭐ alert -> toast 변경
+        toast({
           variant: "destructive",
           title: "로그인 실패",
           description: result.message || "서버 오류가 발생했습니다.",
@@ -66,20 +66,54 @@ export default function LoginPage() {
         return;
       }
 
-      toast({ // ⭐ alert -> toast 변경
+      // ✅ roleCode 정규화 (예: "ROLE_ADMIN" → "ADMIN")
+      const normalizedRole = result.data.roleCode
+        .replace(/^ROLE_/, "")
+        .trim()
+        .toUpperCase();
+
+      toast({
         title: "로그인 성공",
         description: `${result.data.username}님, 환영합니다.`,
       });
 
-      setUser(result.data);
+      // ✅ AuthProvider 컨텍스트 업데이트
+      setUser({
+        ...result.data,
+        roleCode: normalizedRole,
+      });
 
-      const role = result.data.roleCode.trim().toUpperCase();
-      if (role === "ADMIN") router.push("/admin");
-      else router.push("/");
+      // ✅ localStorage에 로그인 정보 저장 (AdminPage, /mypage 라우팅에서 사용)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("userRole", normalizedRole);
 
+        if (result.data.teamId != null) {
+          localStorage.setItem("teamId", String(result.data.teamId));
+        } else {
+          localStorage.removeItem("teamId");
+        }
+
+        // 선택: 전체 유저 정보 저장 (이미 사용하는 곳 있으면 유지)
+        localStorage.setItem(
+          "cloudpilot:user",
+          JSON.stringify({
+            ...result.data,
+            roleCode: normalizedRole,
+          }),
+        );
+      }
+
+      // ✅ 역할별 리다이렉트
+      if (normalizedRole === "ADMIN") {
+        router.push("/admin");
+      } else {
+        // 나머지는 홈으로 보내고, 헤더의 "마이페이지" → /mypage에서 역할별 분기
+        router.push("/");
+      }
     } catch (err) {
       console.error(err);
-      toast({ // ⭐ alert -> toast 변경
+      toast({
         variant: "destructive",
         title: "오류 발생",
         description: "로그인 중 예기치 않은 오류가 발생했습니다.",
@@ -94,7 +128,7 @@ export default function LoginPage() {
   // -----------------------------------
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
-    toast({ // ⭐ alert -> toast 변경
+    toast({
       title: "재설정 요청 완료",
       description: `사번 ${resetEmployeeId}에 대한 비밀번호 재설정 요청이 처리되었습니다.`,
     });
@@ -102,7 +136,7 @@ export default function LoginPage() {
   };
 
   // ------------------------------------------------------------
-  // UI 영역 그대로 (수정 없음, 생략 안함 — 그대로 유지)
+  // UI 영역 그대로
   // ------------------------------------------------------------
   return (
     <div className="min-h-screen flex relative">
@@ -141,8 +175,12 @@ export default function LoginPage() {
               </div>
 
               <div className="mt-8">
-                <h1 className="text-3xl font-bold text-foreground mb-2">로그인</h1>
-                <p className="text-muted-foreground">계정에 로그인하여 시작하세요</p>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  로그인
+                </h1>
+                <p className="text-muted-foreground">
+                  계정에 로그인하여 시작하세요
+                </p>
               </div>
 
               <form className="space-y-6 mt-6" onSubmit={handleLogin}>
@@ -207,7 +245,9 @@ export default function LoginPage() {
               </button>
 
               <div className="mt-8">
-                <h1 className="text-3xl font-bold text-foreground mb-2">비밀번호 찾기</h1>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  비밀번호 찾기
+                </h1>
                 <p className="text-muted-foreground">
                   사번과 이메일을 입력하시면 재설정 요청을 시뮬레이션합니다.
                 </p>
@@ -215,7 +255,10 @@ export default function LoginPage() {
 
               <form className="space-y-6 mt-6" onSubmit={handlePasswordReset}>
                 <div className="space-y-2">
-                  <Label htmlFor="resetEmployeeId" className="text-foreground">
+                  <Label
+                    htmlFor="resetEmployeeId"
+                    className="text-foreground"
+                  >
                     사번
                   </Label>
                   <Input
