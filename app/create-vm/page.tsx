@@ -28,7 +28,7 @@ interface VMSpec {
   cpu?: string;
   memory?: string;
   storage?: string;
-  os: string; // 선택한 OS 이름
+  os: string;
 }
 
 interface FormErrors {
@@ -38,7 +38,6 @@ interface FormErrors {
   general?: string;
 }
 
-// BE /provision 실제 응답 구조에 맞춘 타입
 interface ProvisionResponse {
   totalCount: number;
   jobIds: number[];
@@ -51,23 +50,19 @@ interface ProvisionResponse {
   firstJobId: number;
 }
 
-// /catalog/os-images 응답에 맞춘 타입
 interface OSImage {
   name: string;
   osFamily: string;
   zoneId: number;
 
-  // 나중에 BE에서 더 내려주면 쓰려고 여유 필드만 남겨둠
   id?: number;
   code?: string;
   osVersion?: string;
 
-  // 🔥 vSphere 템플릿 경로 및 아이디 후보들
-  templateName?: string; // 예: "/ce5-3/vm/.../rockylinux-template"
-  imageId?: string; // DB 컬럼이 image_id 인 경우
+  templateName?: string;
+  imageId?: string;
 }
 
-// 공통 ApiResponse / PageResponse (items 기반)
 interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -81,18 +76,9 @@ interface PageResponse<T> {
   hasNext: boolean;
 }
 
-/** ===== OS → 템플릿 경로 매핑 (임시) =====
- *  /catalog/os-images 에서 templateName 이나 imageId 를 안 내려주면
- *  여기 있는 맵을 먼저 사용해서 vSphere 경로로 변환한다.
- */
 const TEMPLATE_NAME_MAP: Record<string, string> = {
-  // osImages.name 값 기준으로 key 맞춰줘야 함
   "ROCKY-LINUX": "/ce5-3/vm/Discovered virtual machine/rockylinux-template",
-  // 필요하면 여기에 계속 추가
-  // "UBUNTU-22.04": "/ce5-3/vm/Discovered virtual machine/ubuntu-22.04-template",
 };
-
-/** ===== 컴포넌트 시작 ===== */
 
 export default function CreateVMPage() {
   const router = useRouter();
@@ -101,15 +87,13 @@ export default function CreateVMPage() {
   const [storage, setStorage] = useState("");
   const [cpu, setCpu] = useState("");
   const [memory, setMemory] = useState("");
-  const [os, setOs] = useState<string>(""); // value 에 OS 이름 사용
+  const [os, setOs] = useState<string>("");
   const [vmCount, setVmCount] = useState("1");
 
-  // 팀 정보
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [authTeamId, setAuthTeamId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
 
-  // OS 목록 상태
   const [osImages, setOsImages] = useState<OSImage[]>([]);
   const [isLoadingOS, setIsLoadingOS] = useState(false);
   const [osLoadError, setOsLoadError] = useState<string | null>(null);
@@ -120,7 +104,7 @@ export default function CreateVMPage() {
     { id: "3", name: "QA" },
   ];
 
-  /** 로그인 정보에서 팀/역할 가져오기 */
+  // 로그인 정보에서 팀/역할 가져오기
   useEffect(() => {
     try {
       const storedTeamId = localStorage.getItem("teamId");
@@ -128,11 +112,11 @@ export default function CreateVMPage() {
       if (storedTeamId) setAuthTeamId(storedTeamId);
       if (storedRole) setUserRole(storedRole);
     } catch {
-      // 무시
+      // ignore
     }
   }, []);
 
-  /** OS 목록 로딩 (os_image 테이블) */
+  /** OS 목록 로딩 */
   useEffect(() => {
     const fetchOsImages = async () => {
       setIsLoadingOS(true);
@@ -141,18 +125,11 @@ export default function CreateVMPage() {
         const response = await apiClient.get<
           ApiResponse<PageResponse<OSImage>>
         >("/catalog/os-images", {
-          params: {
-            page: 0,
-            size: 50,
-            zoneId: 1,
-            sort: "name,asc",
-          },
+          params: { page: 0, size: 50, zoneId: 1, sort: "name,asc" },
         });
 
-        const apiData = response.data?.data;
-        const list = apiData?.items ?? [];
-
-        console.log("[CreateVM] OS 목록 응답:", apiData);
+        const list = response.data?.data?.items ?? [];
+        console.log("[CreateVM] OS 목록 응답:", list);
         setOsImages(list);
       } catch (err: any) {
         console.error("[CreateVM] OS 이미지 목록 조회 실패:", err?.message, err);
@@ -219,15 +196,8 @@ export default function CreateVMPage() {
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
-    // 선택된 OS (이름 기준)
+    // OS 템플릿 매핑
     const selectedOsImage = osImages.find((img) => img.name === os);
-    console.log("[CreateVM] 선택된 OS:", selectedOsImage);
-
-    // 🔥 vSphere 템플릿 이름(경로) 결정
-    // 1순위: 우리가 정의한 매핑 테이블 (TEMPLATE_NAME_MAP)
-    // 2순위: BE 응답 속 templateName
-    // 3순위: BE 응답 속 imageId
-    // 4순위: 그래도 없으면 name 자체 사용 (fallback)
     const osKey = selectedOsImage?.name ?? os;
 
     const templateNameFromBE =
@@ -236,11 +206,10 @@ export default function CreateVMPage() {
       selectedOsImage?.imageId ??
       selectedOsImage?.name;
 
-    // 🔥 additionalConfig 구성
     const additionalConfig =
       templateNameFromBE && templateNameFromBE.length > 0
         ? {
-            templateName: templateNameFromBE, // 예: "/ce5-3/vm/Discovered virtual machine/rockylinux-template"
+            templateName: templateNameFromBE,
             cloneType: "full" as const,
             diskProvisioning: "thin" as const,
             ipAllocationMode: "DHCP" as const,
@@ -258,14 +227,7 @@ export default function CreateVMPage() {
       providerType: "VSPHERE",
       catalogId: 1,
       purpose: "VM Provisioning from UI",
-
-      // 🔥 태그는 지금은 샘플로 고정 값 사용
-      tags: {
-        Environment: "Production",
-        Team: "Backend",
-      },
-
-      // 🔥 여기부터 OS 템플릿 경로 반영
+      tags: { Environment: "Production", Team: "Backend" },
       additionalConfig,
     };
 
@@ -274,17 +236,16 @@ export default function CreateVMPage() {
     try {
       const response = await apiClient.post<ProvisionResponse>(
         "/provision",
-        payload,
+        payload
       );
 
       const provision = response.data;
 
       console.log(
         "[CreateVM] /provision 응답:",
-        JSON.stringify(provision, null, 2),
+        JSON.stringify(provision, null, 2)
       );
 
-      // jobId 계산 (firstJobId > jobIds[0] > jobId 순서)
       const primaryJobId =
         provision.firstJobId ??
         (provision.jobIds && provision.jobIds.length > 0
@@ -294,7 +255,11 @@ export default function CreateVMPage() {
           ? Number.parseInt(provision.jobId, 10)
           : provision.jobId);
 
-      // 새로 생성된 VM 정보 (프론트에서만 사용)
+      /** 🔥 팀 이름 / ID 정리해서 VM 정보에 같이 저장 */
+      const teamKey = selectedTeamId || authTeamId || "";
+      const teamName =
+        teams.find((t) => t.id === teamKey)?.name ?? teamKey;
+
       const newVM = {
         id: `vm-${Date.now()}`,
         name: vmName,
@@ -302,34 +267,42 @@ export default function CreateVMPage() {
         cpu,
         memory,
         storage,
-        os, // 선택한 OS 이름
+        os,
         count: vmCountValue,
-        assignedTeam: selectedTeamId || authTeamId || "",
+        assignedTeam: teamName,      // 보기 좋은 팀 이름
+        assignedTeamId: teamKey,     // 실제 ID
         provisionStatus: provision.status,
         provisionMessage: provision.message,
         jobId: primaryJobId,
       };
 
-      // 최근 생성 VM + 프로비저닝 결과 저장
       try {
         localStorage.setItem("newlyCreatedVM", JSON.stringify(newVM));
-        localStorage.setItem(
-          "lastProvisionResult",
-          JSON.stringify(provision),
-        );
-      } catch {
-        // 로컬스토리지 실패는 그냥 무시
+        localStorage.setItem("lastProvisionResult", JSON.stringify(provision));
+        // 기존 할당 정보는 새 생성 때 초기화
+        localStorage.removeItem("vmAssignments");
+      } catch (e) {
+        console.warn("[CreateVM] localStorage 저장 실패:", e);
       }
 
-      // 생성 진행 화면으로 이동 (jobId도 함께 전달)
-      const query = primaryJobId
-        ? `/creating-vm?next=assign-member&jobId=${primaryJobId}`
-        : `/creating-vm?next=assign-member`;
+      /**
+       * 🔥 creating-vm으로 이동 (jobId/jobIds 방식)
+       */
+      const isBatch =
+        provision.batchProvision &&
+        Array.isArray(provision.jobIds) &&
+        provision.jobIds.length > 0;
 
-      router.push(query);
+      if (isBatch) {
+        const jobIdsParam = provision.jobIds.join(",");
+        router.push(`/creating-vm?jobIds=${jobIdsParam}`);
+      } else if (primaryJobId) {
+        router.push(`/creating-vm?jobId=${primaryJobId}`);
+      } else {
+        router.push("/creating-vm");
+      }
     } catch (error: any) {
-      console.error("[CreateVM] /provision 호출 중 오류: ", error);
-
+      console.error("[CreateVM] /provision 호출 중 오류:", error);
       const messageFromServer =
         error?.response?.data?.message ??
         (error?.response?.status === 403
@@ -377,8 +350,6 @@ export default function CreateVMPage() {
     setOs(spec.os);
   };
 
-  /** ===== JSX ===== */
-
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -392,7 +363,6 @@ export default function CreateVMPage() {
             </p>
           </div>
 
-          {/* 팀 선택 카드 */}
           <Card className="p-6 mb-6">
             <h2 className="text-lg font-semibold mb-4">팀 선택</h2>
             <Select
@@ -437,7 +407,6 @@ export default function CreateVMPage() {
                     </div>
                   )}
 
-                  {/* VM 이름 */}
                   <div className="space-y-2">
                     <Label htmlFor="vm-name">VM 이름</Label>
                     <Input
@@ -448,7 +417,6 @@ export default function CreateVMPage() {
                     />
                   </div>
 
-                  {/* VM 개수 */}
                   <div className="space-y-2">
                     <Label htmlFor="vm-count">VM 개수</Label>
                     <Input
@@ -462,11 +430,9 @@ export default function CreateVMPage() {
                     />
                   </div>
 
-                  {/* 프라이빗 VM 옵션 */}
                   <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
                     <h3 className="font-semibold text-sm">프라이빗 VM 옵션</h3>
 
-                    {/* CPU */}
                     <div className="space-y-2">
                       <Label htmlFor="private-cpu">CPU (vCPU)</Label>
                       <Select value={cpu} onValueChange={setCpu}>
@@ -488,7 +454,6 @@ export default function CreateVMPage() {
                       )}
                     </div>
 
-                    {/* 메모리 */}
                     <div className="space-y-2">
                       <Label htmlFor="private-memory">메모리 (GB)</Label>
                       <Select value={memory} onValueChange={setMemory}>
@@ -510,7 +475,6 @@ export default function CreateVMPage() {
                       )}
                     </div>
 
-                    {/* 스토리지 */}
                     <div className="space-y-2">
                       <Label htmlFor="private-storage">저장공간 (GB)</Label>
                       <Input
@@ -527,15 +491,11 @@ export default function CreateVMPage() {
                       )}
                     </div>
 
-                    {/* OS 선택 (os_image 매핑) */}
                     <div className="space-y-2">
                       <Label htmlFor="private-os">운영체제</Label>
                       <Select
                         value={os}
-                        onValueChange={(value) => {
-                          console.log("[CreateVM] OS 선택:", value);
-                          setOs(value);
-                        }}
+                        onValueChange={(value) => setOs(value)}
                         disabled={isLoadingOS || !!osLoadError}
                       >
                         <SelectTrigger id="private-os">
@@ -578,7 +538,6 @@ export default function CreateVMPage() {
               </Card>
             </div>
 
-            {/* 이전 생성 스펙 */}
             <div className="lg:col-span-1">
               <Card className="p-6 sticky top-20">
                 <h3 className="font-semibold mb-4">이전 생성 스펙</h3>

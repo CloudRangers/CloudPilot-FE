@@ -1,3 +1,4 @@
+// src/app/login/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -8,15 +9,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InfraFlowAnimation } from "@/components/infra-flow-animation";
 import { useUser } from "@/app/providers/AuthProvider";
-import { useToast } from "@/hooks/use-toast"; // ⭐ useToast 임포트
+import { useToast } from "@/hooks/use-toast";
+import { getHomePathByRole } from "@/lib/auth/role-home";
 
 interface LoginApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string | null;
   success: boolean;
   data: T;
   message?: string | null;
 }
 
 interface LoginResponseDto {
+  username: string;
+  roleCode: string;
+  roleName: string;
+  teamId: number | null;
+  teamName: string;
   username: string;
   roleCode: string;
   roleName: string;
@@ -34,7 +44,7 @@ export default function LoginPage() {
 
   const { setUser } = useUser();
   const router = useRouter();
-  const { toast } = useToast(); // ⭐ useToast 훅 사용
+  const { toast } = useToast();
 
   // -----------------------------------
   // 🔥 로그인 실행
@@ -42,10 +52,14 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    e.preventDefault();
+    setLoading(true);
 
     try {
       const res = await fetch("/api/backend/auth/login", {
+      const res = await fetch("/api/backend/auth/login", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
@@ -57,7 +71,7 @@ export default function LoginPage() {
       const result: LoginApiResponse<LoginResponseDto> = await res.json();
 
       if (!result.success) {
-        toast({ // ⭐ alert -> toast 변경
+        toast({
           variant: "destructive",
           title: "로그인 실패",
           description: result.message || "서버 오류가 발생했습니다.",
@@ -66,35 +80,59 @@ export default function LoginPage() {
         return;
       }
 
-      toast({ // ⭐ alert -> toast 변경
+      toast({
         title: "로그인 성공",
         description: `${result.data.username}님, 환영합니다.`,
       });
 
+      // ✅ AuthContext 업데이트
       setUser(result.data);
 
-      const role = result.data.roleCode.trim().toUpperCase();
-      if (role === "ADMIN") router.push("/admin");
-      else router.push("/");
+      // ✅ roleCode 통일
+      const roleCode = result.data.roleCode.trim().toUpperCase();
 
+      // ✅ localStorage 기반 기존 코드와 동기화
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("isLoggedIn", "true");
+          localStorage.setItem("userRole", roleCode);
+
+          if (result.data.teamId != null) {
+            localStorage.setItem("teamId", String(result.data.teamId));
+          } else {
+            localStorage.removeItem("teamId");
+          }
+        }
+      } catch (e) {
+        console.warn("localStorage set error (login)", e);
+      }
+
+      // ✅ 역할별 홈으로 라우팅
+      const target = getHomePathByRole(roleCode);
+      router.push(target);
     } catch (err) {
       console.error(err);
-      toast({ // ⭐ alert -> toast 변경
+      toast({
         variant: "destructive",
         title: "오류 발생",
         description: "로그인 중 예기치 않은 오류가 발생했습니다.",
       });
     } finally {
       setLoading(false);
+      setLoading(false);
     }
+  };
   };
 
   // -----------------------------------
   // 🔧 비밀번호 재설정 시뮬레이션
   // -----------------------------------
+  // -----------------------------------
+  // 🔧 비밀번호 재설정 시뮬레이션
+  // -----------------------------------
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
-    toast({ // ⭐ alert -> toast 변경
+    toast({
       title: "재설정 요청 완료",
       description: `사번 ${resetEmployeeId}에 대한 비밀번호 재설정 요청이 처리되었습니다.`,
     });
@@ -102,7 +140,7 @@ export default function LoginPage() {
   };
 
   // ------------------------------------------------------------
-  // UI 영역 그대로 (수정 없음, 생략 안함 — 그대로 유지)
+  // UI 영역
   // ------------------------------------------------------------
   return (
     <div className="min-h-screen flex relative">
@@ -121,6 +159,7 @@ export default function LoginPage() {
       >
         <div className="w-full max-w-md">
           {!isPasswordReset ? (
+            <>
             <>
               <div>
                 <div className="flex items-center gap-3 mb-2">
@@ -141,10 +180,15 @@ export default function LoginPage() {
               </div>
 
               <div className="mt-8">
-                <h1 className="text-3xl font-bold text-foreground mb-2">로그인</h1>
-                <p className="text-muted-foreground">계정에 로그인하여 시작하세요</p>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  로그인
+                </h1>
+                <p className="text-muted-foreground">
+                  계정에 로그인하여 시작하세요
+                </p>
               </div>
 
+              <form className="space-y-6 mt-6" onSubmit={handleLogin}>
               <form className="space-y-6 mt-6" onSubmit={handleLogin}>
                 <div className="space-y-2">
                   <Label htmlFor="employeeId" className="text-foreground">
@@ -153,6 +197,7 @@ export default function LoginPage() {
                   <Input
                     id="employeeId"
                     type="text"
+                    placeholder="사번을 입력하세요 (예: 1001)"
                     placeholder="사번을 입력하세요 (예: 1001)"
                     className="w-full h-12"
                     value={employeeId}
@@ -196,7 +241,9 @@ export default function LoginPage() {
                 </Button>
               </form>
             </>
+            </>
           ) : (
+            <>
             <>
               <button
                 onClick={() => setIsPasswordReset(false)}
@@ -207,12 +254,15 @@ export default function LoginPage() {
               </button>
 
               <div className="mt-8">
-                <h1 className="text-3xl font-bold text-foreground mb-2">비밀번호 찾기</h1>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  비밀번호 찾기
+                </h1>
                 <p className="text-muted-foreground">
                   사번과 이메일을 입력하시면 재설정 요청을 시뮬레이션합니다.
                 </p>
               </div>
 
+              <form className="space-y-6 mt-6" onSubmit={handlePasswordReset}>
               <form className="space-y-6 mt-6" onSubmit={handlePasswordReset}>
                 <div className="space-y-2">
                   <Label htmlFor="resetEmployeeId" className="text-foreground">
@@ -249,6 +299,7 @@ export default function LoginPage() {
                 </Button>
               </form>
             </>
+            </>
           )}
         </div>
       </div>
@@ -284,6 +335,7 @@ export default function LoginPage() {
               </p>
             </div>
 
+
             <div className="flex items-start gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-foreground mt-2" />
               <p className="text-lg text-primary-foreground/90">
@@ -291,12 +343,14 @@ export default function LoginPage() {
               </p>
             </div>
 
+
             <div className="flex items-start gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-foreground mt-2" />
               <p className="text-lg text-primary-foreground/90">
                 실시간 인프라 모니터링
               </p>
             </div>
+
 
             <div className="flex items-start gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-foreground mt-2" />
@@ -312,5 +366,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
   );
 }
