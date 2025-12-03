@@ -108,9 +108,9 @@ export default function HeadMyPage() {
   const getStatusText = (status: MyPageVm["status"]) => {
     const upper = (status ?? "").toString().toUpperCase()
     switch (upper) {
-      case "RUNNING":
+      case "ON":
         return "실행 중"
-      case "STOPPED":
+      case "OFF":
         return "중지됨"
       case "PENDING":
         return "대기 중"
