@@ -16,9 +16,17 @@ interface LoginApiResponse<T> {
   success: boolean;
   data: T;
   message?: string | null;
+  success: boolean;
+  data: T;
+  message?: string | null;
 }
 
 interface LoginResponseDto {
+  username: string;
+  roleCode: string;
+  roleName: string;
+  teamId: number | null;
+  teamName: string;
   username: string;
   roleCode: string;
   roleName: string;
@@ -44,10 +52,14 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    e.preventDefault();
+    setLoading(true);
 
     try {
       const res = await fetch("/api/backend/auth/login", {
+      const res = await fetch("/api/backend/auth/login", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
@@ -107,9 +119,14 @@ export default function LoginPage() {
       });
     } finally {
       setLoading(false);
+      setLoading(false);
     }
   };
+  };
 
+  // -----------------------------------
+  // 🔧 비밀번호 재설정 시뮬레이션
+  // -----------------------------------
   // -----------------------------------
   // 🔧 비밀번호 재설정 시뮬레이션
   // -----------------------------------
@@ -143,6 +160,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {!isPasswordReset ? (
             <>
+            <>
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <img
@@ -171,6 +189,7 @@ export default function LoginPage() {
               </div>
 
               <form className="space-y-6 mt-6" onSubmit={handleLogin}>
+              <form className="space-y-6 mt-6" onSubmit={handleLogin}>
                 <div className="space-y-2">
                   <Label htmlFor="employeeId" className="text-foreground">
                     사번
@@ -178,6 +197,7 @@ export default function LoginPage() {
                   <Input
                     id="employeeId"
                     type="text"
+                    placeholder="사번을 입력하세요 (예: 1001)"
                     placeholder="사번을 입력하세요 (예: 1001)"
                     className="w-full h-12"
                     value={employeeId}
@@ -221,7 +241,9 @@ export default function LoginPage() {
                 </Button>
               </form>
             </>
+            </>
           ) : (
+            <>
             <>
               <button
                 onClick={() => setIsPasswordReset(false)}
@@ -240,6 +262,7 @@ export default function LoginPage() {
                 </p>
               </div>
 
+              <form className="space-y-6 mt-6" onSubmit={handlePasswordReset}>
               <form className="space-y-6 mt-6" onSubmit={handlePasswordReset}>
                 <div className="space-y-2">
                   <Label htmlFor="resetEmployeeId" className="text-foreground">
@@ -276,6 +299,7 @@ export default function LoginPage() {
                 </Button>
               </form>
             </>
+            </>
           )}
         </div>
       </div>
@@ -311,6 +335,7 @@ export default function LoginPage() {
               </p>
             </div>
 
+
             <div className="flex items-start gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-foreground mt-2" />
               <p className="text-lg text-primary-foreground/90">
@@ -318,12 +343,14 @@ export default function LoginPage() {
               </p>
             </div>
 
+
             <div className="flex items-start gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-foreground mt-2" />
               <p className="text-lg text-primary-foreground/90">
                 실시간 인프라 모니터링
               </p>
             </div>
+
 
             <div className="flex items-start gap-3">
               <div className="w-2 h-2 rounded-full bg-primary-foreground mt-2" />
@@ -339,5 +366,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
   );
 }
