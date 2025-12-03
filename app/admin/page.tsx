@@ -8,13 +8,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  AlertTriangle,
-  Cpu,
-  HardDrive,
-  Network,
-  Zap,
-} from "lucide-react";
+import { AlertTriangle, Cpu, HardDrive, Network, Zap } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PrometheusMonitoring } from "@/components/prometheus-monitoring";
@@ -28,6 +22,10 @@ import type { AnomalyDetectionResultDto } from "@/lib/api/ops";
 
 // ✅ vCenter VM 타입 (테이블/상세 모달용)
 import type { VCenterVm as VCenterVmApiVm } from "@/lib/api/vcenter";
+
+// ✅ 공통 axios 클라이언트 + ApiResponse 타입
+import { apiClient } from "@/lib/api/base-client";
+import type { ApiResponse } from "@/lib/api/monitoring";
 
 import {
   Dialog,
@@ -139,22 +137,25 @@ export default function AdminPage() {
     setLoading(false);
   }, [router]);
 
-  // 운영 모니터링 요약 데이터 로딩
+  // 운영 모니터링 요약 데이터 로딩 (axios 사용)
   useEffect(() => {
     const fetchOverview = async () => {
       try {
         setOverviewLoading(true);
         setOverviewError(null);
 
-        const res = await fetch("http://localhost:8080/monitor/overview");
-        const json = await res.json();
-        console.log("[Admin] /monitor/overview 응답:", json);
+        const res = await apiClient.get<ApiResponse<AdminOverview>>(
+          "/monitor/overview",
+        );
+        const body = res.data;
 
-        if (!json.success || !json.data) {
+        console.log("[Admin] /monitor/overview 응답:", body);
+
+        if (!body.success || !body.data) {
           throw new Error("invalid response");
         }
 
-        setOverview(json.data as AdminOverview);
+        setOverview(body.data);
       } catch (e) {
         console.error("failed to load overview", e);
         setOverviewError("운영 모니터링 데이터를 불러오지 못했습니다.");
@@ -166,7 +167,7 @@ export default function AdminPage() {
     fetchOverview();
   }, []);
 
-  // DEMO VM 리스트 로딩 (teamId 쿼리 반영)
+  // DEMO VM 리스트 로딩 (axios 사용, teamId 반영)
   useEffect(() => {
     const fetchDemoVms = async () => {
       try {
@@ -174,16 +175,6 @@ export default function AdminPage() {
         setVmError(null);
 
         const teamId = localStorage.getItem("teamId");
-        const query = teamId ? `?teamId=${teamId}` : "";
-
-        const res = await fetch(
-          `http://localhost:8080/monitor/vcenter/demo-vms${query}`,
-        );
-        const json = await res.json();
-
-        if (!json.success || !Array.isArray(json.data)) {
-          throw new Error("invalid response");
-        }
 
         type DemoVmDto = {
           name: string;
@@ -191,7 +182,21 @@ export default function AdminPage() {
           memoryUsage?: number | null;
         };
 
-        const items = json.data as DemoVmDto[];
+        const res = await apiClient.get<ApiResponse<DemoVmDto[]>>(
+          "/monitor/vcenter/demo-vms",
+          {
+            // 백엔드가 teamId 쿼리 파라미터를 받도록 구현되어 있다면 사용
+            params: teamId ? { teamId } : undefined,
+          },
+        );
+
+        const body = res.data;
+
+        if (!body.success || !Array.isArray(body.data)) {
+          throw new Error("invalid response");
+        }
+
+        const items = body.data;
 
         const vms: VM[] = items.map((item) => {
           const cpuPercent =
@@ -221,21 +226,24 @@ export default function AdminPage() {
     fetchDemoVms();
   }, []);
 
-  // vCenter VM 실데이터 로딩 (이슈 VM 섹션용)
+  // vCenter VM 실데이터 로딩 (이슈 VM 섹션용, axios 사용)
   useEffect(() => {
     const fetchVcenterVms = async () => {
       try {
         setVcenterLoading(true);
         setVcenterError(null);
 
-        const res = await fetch("http://localhost:8080/monitor/vcenter/vms");
-        const json = await res.json();
+        const res = await apiClient.get<
+          ApiResponse<IssueVCenterVm[] | { items: IssueVCenterVm[] }>
+        >("/monitor/vcenter/vms");
 
-        if (!json.success || !json.data) {
+        const body = res.data;
+
+        if (!body.success || !body.data) {
           throw new Error("invalid response");
         }
 
-        const payload = json.data;
+        const payload = body.data;
         let items: IssueVCenterVm[] = Array.isArray(payload)
           ? payload
           : payload.items ?? [];
@@ -515,7 +523,8 @@ export default function AdminPage() {
           <Card className="mt-8 p-6">
             <h2 className="mb-2 text-2xl font-bold">리소스 모니터링</h2>
             <p className="mb-6 text-sm text-muted-foreground">
-              Prometheus 메트릭 기반 차트와 Grafana 대시보드를 한 화면에서 전환하며 확인할 수 있습니다.
+              Prometheus 메트릭 기반 차트와 Grafana 대시보드를 한 화면에서
+              전환하며 확인할 수 있습니다.
             </p>
 
             <Tabs defaultValue="prometheus" className="space-y-6">
@@ -697,7 +706,8 @@ export default function AdminPage() {
                 : "vCenter VM 상세"}
             </DialogTitle>
             <DialogDescription>
-              vCenter 메타데이터와 Grafana 대시보드를 통해 상세 모니터링을 확인할 수 있습니다.
+              vCenter 메타데이터와 Grafana 대시보드를 통해 상세 모니터링을
+              확인할 수 있습니다.
             </DialogDescription>
           </DialogHeader>
 

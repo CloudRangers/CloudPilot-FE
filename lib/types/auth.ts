@@ -106,7 +106,7 @@ export const hasPermission = {
 // ===============================
 // 🔥 여기서부터 새로 추가되는 부분
 // ===============================
-import { apiClient, ApiResponse } from "./base-client";
+import { apiClient, ApiResponse } from "../api/base-client";
 
 // BE LoginResponse 형태 매핑
 export interface LoginInfo {

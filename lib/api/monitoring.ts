@@ -14,7 +14,8 @@ export interface PrometheusSummary {
 }
 
 export const monitoringApi = {
-  getPrometheusSummary: async () => {
+  // ✅ 반환 타입을 명시적으로 ApiResponse<PrometheusSummary>로 지정
+  getPrometheusSummary: async (): Promise<ApiResponse<PrometheusSummary>> => {
     const res = await apiClient.get<ApiResponse<PrometheusSummary>>(
       "/api/monitoring/prometheus/summary",
     );

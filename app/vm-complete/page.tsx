@@ -7,13 +7,7 @@ import { Footer } from "@/components/footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  CheckCircle2,
-  Cpu,
-  HardDrive,
-  Network,
-  Server,
-} from "lucide-react";
+import { CheckCircle2, Cpu, Network, Server } from "lucide-react";
 import type {
   ProvisionResultMessage,
   NewlyCreatedVmInfo,
@@ -112,10 +106,7 @@ export default function VmCompletePage() {
                 </p>
                 {vmInfo?.assignedTeam && (
                   <p className="text-xs text-muted-foreground">
-                    팀:{" "}
-                    <span className="font-medium">
-                      {vmInfo.assignedTeam}
-                    </span>
+                    팀: <span className="font-medium">{vmInfo.assignedTeam}</span>
                   </p>
                 )}
               </Card>
@@ -173,9 +164,7 @@ export default function VmCompletePage() {
             {instances.length > 0 && (
               <Card className="p-4 md:p-6 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">
-                    생성된 VM 상세 정보
-                  </h2>
+                  <h2 className="text-lg font-semibold">생성된 VM 상세 정보</h2>
                   <Badge variant="outline" className="text-xs">
                     총 {instances.length}대
                   </Badge>
@@ -236,10 +225,7 @@ export default function VmCompletePage() {
 
             {/* 다음 액션 버튼들 */}
             <div className="flex flex-wrap justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => router.push("/")}
-              >
+              <Button variant="outline" onClick={() => router.push("/")}>
                 대시보드로 돌아가기
               </Button>
               <Button
