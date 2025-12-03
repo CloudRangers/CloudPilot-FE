@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Trash2, Check } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api/fetchWithAuth";
-import { useSse } from "@/lib/context/SseContext";
+// useSse는 InstallingPackagePage에서 처리하므로 여기서 주석 처리합니다.
+// import { useSse } from "@/lib/context/SseContext"; 
 
 interface PackageType {
   id: number;
@@ -17,7 +18,6 @@ interface PackageType {
   version: string;
   arch: string;
 }
-// ... (VMType interface remains the same)
 interface VMType {
   id: string;
   name: string;
@@ -29,7 +29,7 @@ interface VMType {
 
 export default function InstallPackagePage() {
   const router = useRouter();
-  const { startSseConnection } = useSse(); // ⭐ useSse 훅 사용
+  // const { startSseConnection } = useSse();
 
   const [packages, setPackages] = useState<PackageType[]>([]);
   const [availablePackages, setAvailablePackages] = useState<PackageType[]>([]);
@@ -40,11 +40,10 @@ export default function InstallPackagePage() {
   const [selectedVMs, setSelectedVMs] = useState<string[]>([]);
   const [isVMModalOpen, setIsVMModalOpen] = useState(false);
 
-  // ... (useEffect and other functions remain the same) ...
     useEffect(() => {
     const fetchPackages = async () => {
       try {
-        const json = await fetchWithAuth("/api/backend/packages"); // ⭐ fetchWithAuth는 이미 JSON을 반환
+        const json = await fetchWithAuth("/api/backend/packages"); 
         if (json?.data) {
           setAvailablePackages(json.data);
         }
@@ -55,7 +54,7 @@ export default function InstallPackagePage() {
 
     const fetchVMs = async () => {
       try {
-        const json = await fetchWithAuth("/api/backend/vms?size=1000"); // ⭐ size 파라미터 추가
+        const json = await fetchWithAuth("/api/backend/vms?size=1000"); 
         if (!json?.data?.items) return;
 
         const mapped = json.data.items.map((vm: any) => {
@@ -74,7 +73,6 @@ export default function InstallPackagePage() {
           };
         });
 
-        // 이름순으로 오름차순 정렬
         mapped.sort((a: VMType, b: VMType) => a.name.localeCompare(b.name));
 
         setAvailableVMs(mapped);
@@ -87,9 +85,6 @@ export default function InstallPackagePage() {
     fetchVMs();
   }, []);
 
-  // ===========================
-  // Toggle Selectors
-  // ===========================
   const togglePackageSelection = (id: string) => {
     setSelectedPackages((prev) =>
       prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
@@ -102,9 +97,6 @@ export default function InstallPackagePage() {
     );
   };
 
-  // ===========================
-  // Add Selected Packages
-  // ===========================
   const handleAddSelectedPackages = () => {
     const add = availablePackages.filter((p) =>
       selectedPackages.includes(String(p.id))
@@ -115,13 +107,11 @@ export default function InstallPackagePage() {
     setIsPackageModalOpen(false);
   };
 
-  // ===========================
-  // Install Package API (JWT and Context)
-  // ===========================
   const handleInstallPackages = async () => {
     if (packages.length === 0 || selectedVMs.length === 0) return;
 
     const payload = {
+      // 선택된 VM ID 목록을 서버에 전달합니다.
       vmIds: selectedVMs.map(Number),
       packages: packages.map((pkg) => ({
         name: pkg.name,
@@ -138,18 +128,18 @@ export default function InstallPackagePage() {
         body: JSON.stringify(payload),
       });
 
-      if (!result?.success || !result.data.jobIds || result.data.jobIds.length === 0) {
+      if (!result?.success || !result.data?.jobIds || result.data.jobIds.length === 0) {
         console.error("INSTALL FAIL RESPONSE:", result);
-        throw new Error("Failed to get a valid job ID.");
+        throw new Error("Failed to get valid job IDs.");
       }
       
-      const jobId = result.data.jobIds[0];
+      const jobIds = result.data.jobIds as (string | number)[];
       
-      // ⭐ SSE 연결 시작
-      startSseConnection(jobId);
+      // 서버로부터 받은 Job ID 배열을 쿼리 파라미터로 변환하여 전달합니다.
+      const jobIdsString = jobIds.join(',');
 
-      // ⭐ 페이지 이동
-      router.push(`/installing-package`);
+      // SSE 연결 대신, jobIds를 파라미터로 넘겨 페이지 이동합니다.
+      router.push(`/installing-package?jobIds=${jobIdsString}`);
 
     } catch (err) {
       console.error(err);
@@ -166,7 +156,7 @@ export default function InstallPackagePage() {
         <div className="container mx-auto px-4 py-10">
           <div className="mx-auto max-w-5xl space-y-10">
 
-            {/* ======================= 선택된 VM ======================= */}
+            {/* VM 선택 영역 (UI 구조 유지) */}
             <Card className="relative border-2 shadow-lg p-6 min-h-[220px]">
               <Button
                 size="sm"
@@ -176,7 +166,7 @@ export default function InstallPackagePage() {
                 VM 선택하기
               </Button>
 
-              <h2 className="text-xl font-semibold mb-4">선택된 VM</h2>
+              <h2 className="text-xl font-semibold mb-4">선택된 VM ({selectedVMs.length}대)</h2>
 
               {selectedVMs.length === 0 ? (
                 <div className="flex items-center justify-center h-[240px]">
@@ -216,7 +206,7 @@ export default function InstallPackagePage() {
               )}
             </Card>
 
-            {/* ======================= 선택된 패키지 ======================= */}
+            {/* 패키지 선택 영역 (UI 구조 유지) */}
             <Card className="relative border-2 shadow-lg p-6 min-h-[220px]">
               <Button
                 size="sm"
@@ -267,7 +257,7 @@ export default function InstallPackagePage() {
               )}
             </Card>
 
-            {/* ======================= 설치 버튼 ======================= */}
+            {/* 설치 버튼 */}
             <div className="flex justify-center">
               <Button
                 size="lg"
@@ -275,7 +265,7 @@ export default function InstallPackagePage() {
                 className="min-w-[260px] h-12 font-semibold shadow-lg"
                 onClick={handleInstallPackages}
               >
-                패키지 설치 요청
+                패키지 설치 요청 ({selectedVMs.length}대)
               </Button>
             </div>
           </div>
@@ -284,7 +274,7 @@ export default function InstallPackagePage() {
 
       <Footer />
 
-      {/* ======================= VM 선택 모달 ======================= */}
+      {/* VM 선택 모달 (UI 구조 유지) */}
       {isVMModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -348,7 +338,7 @@ export default function InstallPackagePage() {
         </div>
       )}
 
-      {/* ======================= 패키지 선택 모달 ======================= */}
+      {/* 패키지 선택 모달 (UI 구조 유지) */}
       {isPackageModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
