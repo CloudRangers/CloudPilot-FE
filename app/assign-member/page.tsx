@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -36,7 +36,25 @@ interface NewlyCreatedVM {
   jobId?: number | string;
 }
 
+// 🔹 페이지(겉껍데기): Suspense로 실제 내용을 감싸줌
 export default function AssignMemberPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-sm text-muted-foreground">
+            페이지를 불러오는 중입니다...
+          </p>
+        </div>
+      }
+    >
+      <AssignMemberContent />
+    </Suspense>
+  );
+}
+
+// 🔹 실제 로직이 들어가는 컴포넌트
+function AssignMemberContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobIdFromQuery = searchParams.get("jobId") ?? undefined;
@@ -67,11 +85,10 @@ export default function AssignMemberPage() {
         const storedAssignments = localStorage.getItem("vmAssignments");
         if (storedAssignments) {
           try {
-            const parsedAssignments = JSON.parse(storedAssignments) as Record<
-              number,
-              string
-            >;
-            setAssignments((prev) => {
+            const parsedAssignments = JSON.parse(
+              storedAssignments
+            ) as Record<number, string>;
+            setAssignments(() => {
               const next: Record<number, string> = {};
               for (let i = 0; i < count; i++) {
                 next[i] = parsedAssignments[i] ?? "";
@@ -127,7 +144,10 @@ export default function AssignMemberPage() {
     router.push(nextUrl);
   };
 
-  if (!vmInfo) return null;
+  if (!vmInfo) {
+    // Suspense fallback → hydration 이후 useEffect에서 vmInfo 세팅되면 자동 렌더됨
+    return null;
+  }
 
   const count = Number(vmInfo.count) || 1;
 
@@ -142,10 +162,10 @@ export default function AssignMemberPage() {
       <Header />
       <main className="flex-1 bg-background">
         <div className="container px-4 py-8">
-          <h1 className="text-2xl font-bold mb-6">VM 팀원 할당</h1>
+          <h1 className="mb-6 text-2xl font-bold">VM 팀원 할당</h1>
 
           {/* VM 기본 정보 */}
-          <Card className="p-4 mb-6 space-y-1">
+          <Card className="mb-6 space-y-1 p-4">
             <p className="text-sm">
               VM 이름: <strong>{vmInfo.name}</strong>
             </p>
@@ -167,8 +187,8 @@ export default function AssignMemberPage() {
           {/* VM 개수만큼 카드 렌더링 */}
           <div className="space-y-6">
             {Array.from({ length: count }).map((_, index) => (
-              <Card key={index} className="p-6 space-y-3">
-                <h2 className="font-semibold mb-2">VM #{index + 1} 할당</h2>
+              <Card key={index} className="space-y-3 p-6">
+                <h2 className="mb-2 font-semibold">VM #{index + 1} 할당</h2>
 
                 {filtered.length > 0 ? (
                   <>
@@ -200,7 +220,7 @@ export default function AssignMemberPage() {
             ))}
           </div>
 
-          <div className="flex justify-end mt-8">
+          <div className="mt-8 flex justify-end">
             <Button
               onClick={handleAssign}
               disabled={Object.values(assignments).some((v) => !v)}
