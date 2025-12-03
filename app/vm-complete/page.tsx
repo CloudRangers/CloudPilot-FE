@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -14,7 +14,36 @@ import type {
   InstanceInfo,
 } from "@/lib/types/provision";
 
+// ✅ Suspense로 감싸는 외부 컴포넌트
 export default function VmCompletePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col">
+          <Header />
+          <main className="flex-1 bg-background">
+            <div className="container px-4 py-8 md:px-6 md:py-12">
+              <div className="mx-auto max-w-3xl space-y-4 text-center">
+                <div className="flex justify-center">
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  VM 생성 정보를 불러오는 중입니다...
+                </p>
+              </div>
+            </div>
+          </main>
+          <Footer />
+        </div>
+      }
+    >
+      <VmCompleteContent />
+    </Suspense>
+  );
+}
+
+// ✅ 실제 로직은 여기로 옮김
+function VmCompleteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobIdFromQuery = searchParams?.get("jobId") ?? undefined;
