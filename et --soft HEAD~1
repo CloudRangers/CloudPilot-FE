@@ -1,0 +1,34 @@
+[33mcommit 699ea7997ab6d9643891428f8816265cbbda9c26[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfix/#24[m[33m)[m
+Author: Lee je hyun <lyjh98@naver.com>
+Date:   Tue Dec 2 18:20:46 2025 +0900
+
+    [fix] #24 - 마이페이지 수정
+
+.env.local
+.gitignore
+Dockerfile
+Jenkinsfile
+README.md
+app/creating-vm/page.tsx
+app/install-package/page.tsx
+app/installing-package/page.tsx
+app/layout.tsx
+app/login/page.tsx
+app/package-failed/page.tsx
+app/page.tsx
+app/providers/AuthProvider.tsx
+components/chatbot-wrapper.tsx
+components/chatbot.tsx
+components/feature-card.tsx
+components/footer.tsx
+components/header.tsx
+hooks/use-toast.ts
+lib/api/base-client.ts
+lib/api/fetchWithAuth.ts
+lib/context/SseContext.tsx
+lib/types/auth.ts
+next.config.mjs
+next.config.ts
+package-lock.json
+package.json
+structure.txt

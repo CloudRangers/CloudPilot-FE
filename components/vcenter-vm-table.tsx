@@ -275,11 +275,11 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredSortedVms.map((vm) => (
+          {filteredSortedVms.map((vm, idx) => (
             <TableRow
-              key={vm.vmId}
+              key={vm.vmId ?? `${vm.name}-${idx}`}
               className={onVmClick ? "cursor-pointer hover:bg-muted/50" : ""}
-              onClick={() => onVmClick?.(vm)}  
+              onClick={() => onVmClick?.(vm)}
             >
               <TableCell className="font-mono text-xs">{vm.vmId}</TableCell>
               <TableCell>{vm.name}</TableCell>

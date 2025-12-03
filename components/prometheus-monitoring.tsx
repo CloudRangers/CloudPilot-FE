@@ -70,28 +70,28 @@ export function PrometheusMonitoring() {
   }, []);
 
   // summary 기반 서비스 가용률
-  const fetchSummaryMetrics = async () => {
-    const body = await monitoringApi.getPrometheusSummary();
+    const fetchSummaryMetrics = async () => {
+      const body = await monitoringApi.getPrometheusSummary();
 
-    if (!body.success) {
-      throw new Error(body.message || "Prometheus 요약 메트릭 조회 실패");
-    }
+      if (!body.success) {
+        throw new Error(body.message || "Prometheus 요약 메트릭 조회 실패");
+      }
 
-    const { totalTargets, upTargets, downTargets } = body.data;
-    const nowLabel = new Date().toLocaleTimeString();
+      const { totalTargets, upTargets, downTargets } = body.data;
+      const nowLabel = new Date().toLocaleTimeString();
 
-    const upRate = totalTargets > 0 ? (upTargets / totalTargets) * 100 : 0;
-    const downRate = totalTargets > 0 ? (downTargets / totalTargets) * 100 : 0;
+      const upRate = totalTargets > 0 ? (upTargets / totalTargets) * 100 : 0;
+      const downRate = totalTargets > 0 ? (downTargets / totalTargets) * 100 : 0;
 
-    setCpuData((prev) => [
-      ...prev.slice(-29),
-      { timestamp: nowLabel, value: Number(upRate.toFixed(2)) },
-    ]);
-    setMemoryData((prev) => [
-      ...prev.slice(-29),
-      { timestamp: nowLabel, value: Number(downRate.toFixed(2)) },
-    ]);
-  };
+      setCpuData((prev) => [
+        ...prev.slice(-29),
+        { timestamp: nowLabel, value: Number(upRate.toFixed(2)) },
+      ]);
+      setMemoryData((prev) => [
+        ...prev.slice(-29),
+        { timestamp: nowLabel, value: Number(downRate.toFixed(2)) },
+      ]);
+    };
 
   const fetchVmRecharts = async (
     vmId: string,
