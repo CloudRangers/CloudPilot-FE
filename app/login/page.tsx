@@ -44,15 +44,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/backend/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          empno: parseInt(employeeId, 10),
-          password: password,
-        }),
-      });
+      const res = await fetch(
+  `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/login`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      empno: parseInt(employeeId, 10),
+      password: password,
+    }),
+  }
+);
 
       const result: LoginApiResponse<LoginResponseDto> = await res.json();
 
