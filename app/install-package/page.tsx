@@ -242,11 +242,11 @@ export default function InstallPackagePage() {
                       className="flex items-start justify-between p-4 rounded-xl border hover:border-primary/40 transition-all bg-card"
                     >
                       <div className="space-y-1">
-                        <h3 className="font-semibold">{pkg.name}</h3>
+                        <h3 className="font-semibold text-lg">{pkg.name}</h3>
                         <p className="text-sm text-muted-foreground">{pkg.description}</p>
 
                         {pkg.name !== "vscode" && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             Version: {pkg.version}
                           </p>
                         )}

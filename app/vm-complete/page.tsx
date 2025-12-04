@@ -79,11 +79,11 @@ export default function VmCompletePage() {
               <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
                 VM 생성이 완료되었습니다
               </h1>
-              <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
+              <p className="max-w-2xl !text-base text-muted-foreground md:!text-lg">
                 {successMessage}
               </p>
               {jobId && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Job ID: <span className="font-mono">{jobId}</span>
                 </p>
               )}
@@ -92,28 +92,28 @@ export default function VmCompletePage() {
             {/* 요약 카드 */}
             <div className="grid gap-4 md:grid-cols-3">
               <Card className="p-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Server className="h-4 w-4" />
+                <div className="flex items-center gap-2 text-lg font-medium text-muted-foreground">
+                  <Server className="h-5 w-5" />
                   생성된 VM 수
                 </div>
                 <p className="text-2xl font-bold">
                   {totalCount ?? "-"}
                   {totalCount != null && (
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    <span className="ml-1 text-base font-normal text-muted-foreground">
                       대
                     </span>
                   )}
                 </p>
                 {vmInfo?.assignedTeam && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     팀: <span className="font-medium">{vmInfo.assignedTeam}</span>
                   </p>
                 )}
               </Card>
 
               <Card className="p-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Cpu className="h-4 w-4" />
+                <div className="flex items-center gap-2 text-lg font-medium text-muted-foreground">
+                  <Cpu className="h-5 w-5" />
                   기본 스펙
                 </div>
                 {vmInfo ? (
@@ -122,7 +122,7 @@ export default function VmCompletePage() {
                       {vmInfo.cpu} vCPU / {vmInfo.memory}GB RAM
                     </p>
                     <p>디스크 {vmInfo.storage}GB</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       OS: {vmInfo.os}
                     </p>
                   </div>
@@ -134,12 +134,12 @@ export default function VmCompletePage() {
               </Card>
 
               <Card className="p-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Network className="h-4 w-4" />
+                <div className="flex items-center gap-2 text-lg font-medium text-muted-foreground">
+                  <Network className="h-5 w-5" />
                   네트워크 / IP
                 </div>
                 {instances.length > 0 ? (
-                  <div className="space-y-1 text-xs text-muted-foreground">
+                  <div className="space-y-1 text-sm text-muted-foreground">
                     <p>
                       대표 IP:{" "}
                       <span className="font-mono">
