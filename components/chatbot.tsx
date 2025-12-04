@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { MessageCircle, X, AlertCircle } from "lucide-react"
-import { ChatMessage } from "./chatbot-types" // (원래 위치 그대로 사용하면 됨)
+
+export interface ChatMessage {
+  text: string;
+  isBot: boolean;
+}
 
 interface ChatbotProps {
   messages: ChatMessage[]
@@ -86,3 +90,4 @@ export function Chatbot({ messages, onSendMessage, hasError = false, onErrorChan
     </>
   )
 }
+
