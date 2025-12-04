@@ -14,6 +14,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PrometheusMonitoring } from "@/components/prometheus-monitoring";
 import { GrafanaEmbed } from "@/components/grafana-embed";
 
+import { HostResourceCharts } from "@/components/host-resource-charts";
+
 import { VCenterSummaryCards } from "@/components/vcenter-summary-cards";
 import { VCenterVmTable } from "@/components/vcenter-vm-table";
 
@@ -536,7 +538,13 @@ export default function AdminPage() {
               </TabsList>
 
               <TabsContent value="prometheus">
-                <PrometheusMonitoring />
+                <div className="space-y-6">
+                  {/* 172.16.0.30 호스트 CPU/메모리 */}
+                  <HostResourceCharts hostName="172.16.0.30" />
+
+                  {/* 기존 실시간 서비스 가용률 모니터링 */}
+                  <PrometheusMonitoring />
+                </div>
               </TabsContent>
 
               <TabsContent value="grafana">
