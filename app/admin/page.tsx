@@ -37,6 +37,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+// 🔹 챗봇 관련
+import { Chatbot } from "@/components/chatbot";
+import type { ChatMessage } from "@/components/chatbot/chatbot-types";
+
 // --- DEMO VM 타입 ---
 type VM = {
   name: string;
@@ -76,6 +80,8 @@ type IssueVCenterVm = {
   createdAt: string;
 };
 
+type RoleCode = "ADMIN" | "HEAD" | "LEADER" | "MEMBER" | null;
+
 export default function AdminPage() {
   const router = useRouter();
 
@@ -112,6 +118,10 @@ export default function AdminPage() {
   const [vcenterLoading, setVcenterLoading] = useState(false);
   const [vcenterError, setVcenterError] = useState<string | null>(null);
 
+  // 🔹 챗봇 상태
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatHasError, setChatHasError] = useState(false);
+
   const handleViewDetail = (vm: VM) => {
     setSelectedVM(vm);
     setAnomalyResult(null);
@@ -128,7 +138,7 @@ export default function AdminPage() {
   // ADMIN 권한 체크
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-    const userRole = localStorage.getItem("userRole");
+    const userRole = localStorage.getItem("userRole") as RoleCode;
 
     if (!isLoggedIn || userRole !== "ADMIN") {
       router.push("/login");
@@ -147,7 +157,7 @@ export default function AdminPage() {
         setOverviewError(null);
 
         const res = await apiClient.get<ApiResponse<AdminOverview>>(
-            "/monitor/overview",
+            "/monitor/overview"
         );
         const body = res.data;
 
@@ -166,8 +176,10 @@ export default function AdminPage() {
       }
     };
 
-    fetchOverview();
-  }, []);
+    if (isAuthorized) {
+      fetchOverview();
+    }
+  }, [isAuthorized]);
 
   // DEMO VM 목록 로딩
   useEffect(() => {
@@ -237,8 +249,10 @@ export default function AdminPage() {
       }
     };
 
-    fetchDemoVms();
-  }, []);
+    if (isAuthorized) {
+      fetchDemoVms();
+    }
+  }, [isAuthorized]);
 
   // vCenter VM 실데이터 로딩 (이슈 VM 섹션용, axios 사용)
   useEffect(() => {
@@ -267,7 +281,7 @@ export default function AdminPage() {
         if (teamIdStr) {
           const myTeamId = Number(teamIdStr);
           items = items.filter(
-              (vm) => vm.teamId != null && Number(vm.teamId) === myTeamId,
+              (vm) => vm.teamId != null && Number(vm.teamId) === myTeamId
           );
         }
 
@@ -280,12 +294,14 @@ export default function AdminPage() {
       }
     };
 
-    fetchVcenterVms();
-  }, []);
+    if (isAuthorized) {
+      fetchVcenterVms();
+    }
+  }, [isAuthorized]);
 
   // 이슈 VM 필터링
   const issueVms = vcenterVms.filter(
-      (vm) => vm.powerState === "POWERED_OFF" || vm.alarmStatus !== "OK",
+      (vm) => vm.powerState === "POWERED_OFF" || vm.alarmStatus !== "OK"
   );
 
   // AI 이상징후 분석 호출 (DEMO VM용)
@@ -324,37 +340,182 @@ export default function AdminPage() {
 
     const base =
         process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000";
-    const uid =
-        process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail";
-    const slug =
-        process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail";
+    const uid = process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail";
+    const slug = process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail";
 
     const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
-        selectedVM.name,
+        selectedVM.name
     )}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
   // vCenter VM 메모리 GB 포맷
-  const formatMemoryGiB = (miB: number) =>
-      `${(miB / 1024).toFixed(1)} GB`;
+  const formatMemoryGiB = (miB: number) => `${(miB / 1024).toFixed(1)} GB`;
 
   // vCenter VM Grafana 링크
   const openVcenterGrafana = (vm: VCenterVmApiVm) => {
     const base =
         process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000";
-    const uid =
-        process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail";
-    const slug =
-        process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail";
+    const uid = process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail";
+    const slug = process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail";
 
     const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
-        vm.name,
+        vm.name
     )}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
   };
+
+  // 🔹 챗봇에서 사용자 메시지 보냈을 때 (지금은 상태만 업데이트, 나중에 n8n/AI API 연동)
+  const handleChatSend = async (messageText: string) => {
+    if (!messageText.trim()) return;
+
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        text: messageText,
+        isBot: false,
+      },
+    ]);
+
+    // TODO: 여기서 백엔드 /ops/chat 이나 n8n Webhook 호출해서
+    //       AI 응답 받아오고, setChatMessages로 isBot: true 메시지 추가
+  };
+
+  // 🔥 vSphere AI 오류 분석 SSE 구독 (관리자 전용)
+  useEffect(() => {
+    if (!isAuthorized) return;
+
+    const baseUrl =
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+    const trimmedBase = baseUrl.endsWith("/")
+        ? baseUrl.slice(0, -1)
+        : baseUrl;
+    const sseUrl = `${trimmedBase}/sse/admin/vsphere-error`;
+
+    console.log("[Admin SSE] Connecting to", sseUrl);
+
+    const eventSource = new EventSource(sseUrl, {
+      withCredentials: true,
+    } as EventSourceInit);
+
+    const handleEvent = (event: MessageEvent) => {
+      console.log("[Admin SSE] raw event:", event.data);
+
+      try {
+        // 🔹 빈/keep-alive 이벤트 무시
+        if (!event.data) {
+          console.log("[Admin SSE] empty event. ignore.");
+          return;
+        }
+
+        // 디버깅용: 타입까지 같이 찍기
+        console.log("[Admin SSE] event type:", (event as any).type);
+        console.log("[Admin SSE] raw event:", event.data);
+
+        const parsed = JSON.parse(event.data || "{}");
+        const data = Array.isArray(parsed) ? (parsed[0] ?? {}) : parsed;
+
+        console.log("[Admin SSE] parsed data:", data);
+
+        let text = "";
+
+        // ✅ n8n → BE → SSE : { vmName, reason, actionRequired, additionalChecks }
+        if (data.vmName && (data.reason || data.actionRequired)) {
+          const vmName = data.vmName ?? "알 수 없는 VM";
+          const reason = data.reason ?? "";
+          const actionRequired = data.actionRequired ?? "";
+          const additionalChecks = data.additionalChecks ?? "";
+
+          const lines: string[] = [];
+          lines.push("🚨 vSphere 알람 분석 결과");
+          lines.push(`대상 VM: ${vmName}`);
+
+          if (reason) {
+            lines.push("");
+            lines.push(`상세 내용:\n${reason}`);
+          }
+          if (actionRequired) {
+            lines.push("");
+            lines.push(`조치 필요:\n${actionRequired}`);
+          }
+          if (additionalChecks) {
+            lines.push("");
+            lines.push(`추가 점검:\n${additionalChecks}`);
+          }
+
+          text = lines.join("\n");
+        } else {
+          // 🔙 기존 에러 포맷 fallback
+          const vmName =
+              data.vmName || data.vm || data.targetVm || "알 수 없는 VM";
+          const severity = data.severity || data.alarmStatus || "UNKNOWN";
+          const summary = data.aiSummary || data.summary || data.message || "";
+          const cause =
+              data.aiCause || data.cause || data.rootCause || "";
+          const solution =
+              data.aiSolution || data.solution || data.recommendation || "";
+
+          const lines: string[] = [];
+          lines.push(`🚨 vSphere 알람 감지 (${severity})`);
+          lines.push(`대상 VM: ${vmName}`);
+
+          if (summary) {
+            lines.push("");
+            lines.push(`요약: ${summary}`);
+          }
+          if (cause) {
+            lines.push("");
+            lines.push(`원인 추정: ${cause}`);
+          }
+          if (solution) {
+            lines.push("");
+            lines.push(`권장 조치: ${solution}`);
+          }
+
+          text = lines.join("\n");
+        }
+
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            text,
+            isBot: true,
+          },
+        ]);
+        setChatHasError(true);
+      } catch (e) {
+        console.error("[Admin SSE] 메시지 파싱 실패", e, event.data);
+      }
+    };
+
+    eventSource.onopen = () => {
+      console.log("[Admin SSE] Connected");
+    };
+
+    eventSource.onerror = (err) => {
+      console.error(
+          "[Admin SSE] Error",
+          err,
+          "readyState=",
+          eventSource.readyState
+      );
+    };
+
+    // ✔️ 기본 message 이벤트도 듣고,
+    eventSource.onmessage = handleEvent;
+
+    // ✔️ 서버가 `event: vsphere-error` 로 보내는 커스텀 이벤트도 같이 듣기
+    eventSource.addEventListener("vsphere-error", handleEvent as any);
+
+    return () => {
+      console.log("[Admin SSE] Disconnected");
+      eventSource.close();
+    };
+  }, [isAuthorized]);
+
+
 
   if (loading) {
     return (
@@ -676,7 +837,13 @@ export default function AdminPage() {
           </DialogContent>
         </Dialog>
 
-        {/* (선택) DEMO VM 상세 모달: 필요하면 여기에 추가 구현 가능 */}
+        {/* 🔹 관리자 전용 vSphere AI 오류 챗봇 */}
+        <Chatbot
+            messages={chatMessages}
+            onSendMessage={handleChatSend}
+            hasError={chatHasError}
+            onErrorChange={setChatHasError}
+        />
       </div>
   );
 }
