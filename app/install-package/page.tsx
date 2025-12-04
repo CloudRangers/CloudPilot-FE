@@ -7,7 +7,7 @@ import { Footer } from "@/components/footer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Trash2, Check } from "lucide-react";
-import { fetchWithAuth } from "@/lib/api/fetchWithAuth";
+import { apiClient } from "@/lib/api/base-client";
 // useSse는 InstallingPackagePage에서 처리하므로 여기서 주석 처리합니다.
 // import { useSse } from "@/lib/context/SseContext"; 
 
@@ -43,9 +43,9 @@ export default function InstallPackagePage() {
     useEffect(() => {
     const fetchPackages = async () => {
       try {
-        const json = await fetchWithAuth("/api/backend/packages"); 
-        if (json?.data) {
-          setAvailablePackages(json.data);
+        const response = await apiClient.get<any>("/packages"); 
+        if (response.data?.data) {
+          setAvailablePackages(response.data.data);
         }
       } catch (err) {
         console.error("PACKAGE ERROR:", err);
@@ -54,10 +54,10 @@ export default function InstallPackagePage() {
 
     const fetchVMs = async () => {
       try {
-        const json = await fetchWithAuth("/api/backend/vms?size=1000"); 
-        if (!json?.data?.items) return;
+        const response = await apiClient.get<any>("/vms?size=1000"); 
+        if (!response.data?.data?.items) return;
 
-        const mapped = json.data.items.map((vm: any) => {
+        const mapped = response.data.data.items.map((vm: any) => {
           const tags =
             typeof vm.tags === "string"
               ? JSON.parse(vm.tags || "{}")
@@ -120,13 +120,12 @@ export default function InstallPackagePage() {
     };
 
     try {
-      const result = await fetchWithAuth("/api/backend/packages/install", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await apiClient.post<any>(
+        "/packages/install",
+        payload
+      );
+
+      const result = response.data;
 
       if (!result?.success || !result.data?.jobIds || result.data.jobIds.length === 0) {
         console.error("INSTALL FAIL RESPONSE:", result);
