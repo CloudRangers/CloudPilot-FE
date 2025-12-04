@@ -3,6 +3,7 @@
 import { apiClient } from "@/lib/api/base-client";
 
 import { useEffect, useState } from "react";
+import { Suspense } from "react";
 import { useRouter } from "next/navigation";
 
 import { Header } from "@/components/header";
@@ -80,7 +81,10 @@ const TEMPLATE_NAME_MAP: Record<string, string> = {
   "ROCKY-LINUX": "/ce5-3/vm/Discovered virtual machine/rockylinux-template",
 };
 
-export default function CreateVMPage() {
+/**
+ * 실제 로직이 들어 있는 컴포넌트
+ */
+function CreateVMPageInner() {
   const router = useRouter();
   const [errors, setErrors] = useState<FormErrors>({});
   const [vmName, setVmName] = useState("");
@@ -132,8 +136,14 @@ export default function CreateVMPage() {
         console.log("[CreateVM] OS 목록 응답:", list);
         setOsImages(list);
       } catch (err: any) {
-        console.error("[CreateVM] OS 이미지 목록 조회 실패:", err?.message, err);
-        setOsLoadError("OS 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+        console.error(
+          "[CreateVM] OS 이미지 목록 조회 실패:",
+          err?.message,
+          err
+        );
+        setOsLoadError(
+          "OS 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."
+        );
       } finally {
         setIsLoadingOS(false);
       }
@@ -173,7 +183,8 @@ export default function CreateVMPage() {
     const vmCountValue = Number.parseInt(vmCount, 10) || 1;
 
     if (memoryValue > 32) {
-      newErrors.memory = "서버 메모리가 부족합니다. 최대 32GB까지 선택 가능합니다.";
+      newErrors.memory =
+        "서버 메모리가 부족합니다. 최대 32GB까지 선택 가능합니다.";
     }
 
     if (cpuValue > 8 && memoryValue < 16) {
@@ -257,8 +268,7 @@ export default function CreateVMPage() {
 
       /** 🔥 팀 이름 / ID 정리해서 VM 정보에 같이 저장 */
       const teamKey = selectedTeamId || authTeamId || "";
-      const teamName =
-        teams.find((t) => t.id === teamKey)?.name ?? teamKey;
+      const teamName = teams.find((t) => t.id === teamKey)?.name ?? teamKey;
 
       const newVM = {
         id: `vm-${Date.now()}`,
@@ -269,8 +279,8 @@ export default function CreateVMPage() {
         storage,
         os,
         count: vmCountValue,
-        assignedTeam: teamName,      // 보기 좋은 팀 이름
-        assignedTeamId: teamKey,     // 실제 ID
+        assignedTeam: teamName, // 보기 좋은 팀 이름
+        assignedTeamId: teamKey, // 실제 ID
         provisionStatus: provision.status,
         provisionMessage: provision.message,
         jobId: primaryJobId,
@@ -278,7 +288,10 @@ export default function CreateVMPage() {
 
       try {
         localStorage.setItem("newlyCreatedVM", JSON.stringify(newVM));
-        localStorage.setItem("lastProvisionResult", JSON.stringify(provision));
+        localStorage.setItem(
+          "lastProvisionResult",
+          JSON.stringify(provision)
+        );
         // 기존 할당 정보는 새 생성 때 초기화
         localStorage.removeItem("vmAssignments");
       } catch (e) {
@@ -567,3 +580,32 @@ export default function CreateVMPage() {
     </div>
   );
 }
+
+/**
+ * Suspense Boundary 래퍼 컴포넌트
+ */
+export default function CreateVMPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col">
+          <Header />
+          <main className="flex-1 bg-background">
+            <div className="container px-4 py-8 md:px-6">
+              <Card className="p-6">
+                <p className="text-sm text-muted-foreground">
+                  페이지를 불러오는 중입니다...
+                </p>
+              </Card>
+            </div>
+          </main>
+          <Footer />
+        </div>
+      }
+    >
+      <CreateVMPageInner />
+    </Suspense>
+  );
+}
+
+

@@ -5,7 +5,8 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { CheckCircle2, Home, Package } from "lucide-react"
+
+import { CheckCircle2, Home, User } from "lucide-react"
 
 export default function PackageCompletePage() {
   const router = useRouter()
@@ -45,10 +46,10 @@ export default function PackageCompletePage() {
                     size="lg"
                     variant="outline"
                     className="min-w-[180px] shadow-sm hover:shadow-md transition-all bg-transparent"
-                    onClick={() => router.push("/package-list")}
+                    onClick={() => router.push("/mypage")} 
                   >
-                    <Package className="mr-2 h-5 w-5" />
-                    패키지 현황 보기
+                    <User className="mr-2 h-5 w-5" />
+                    마이페이지로 이동
                   </Button>
                 </div>
               </div>
@@ -68,7 +69,8 @@ export default function PackageCompletePage() {
                     <div className="flex-1">
                       <p className="font-medium">다음 단계</p>
                       <p className="text-sm text-muted-foreground">
-                        패키지 현황 페이지에서 설치된 패키지를 확인하고 관리할 수 있습니다
+                        {/* 다음 단계 텍스트도 마이페이지 관련 내용으로 변경 */}
+                        마이페이지에서 계정 정보 및 설치된 패키지 관련 설정을 확인하고 관리할 수 있습니다
                       </p>
                     </div>
                   </div>

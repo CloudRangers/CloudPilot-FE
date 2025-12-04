@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -10,7 +10,36 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, RefreshCcw, ServerOff } from "lucide-react";
 import type { ProvisionResultMessage } from "@/lib/types/provision";
 
+// ✅ Suspense 래퍼 컴포넌트
 export default function VmFailedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col">
+          <Header />
+          <main className="flex-1 bg-background">
+            <div className="container px-4 py-8 md:px-6 md:py-12">
+              <div className="mx-auto max-w-3xl space-y-4 text-center">
+                <div className="flex justify-center">
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-destructive/40 border-t-destructive" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  실패한 작업 정보를 불러오는 중입니다...
+                </p>
+              </div>
+            </div>
+          </main>
+          <Footer />
+        </div>
+      }
+    >
+      <VmFailedContent />
+    </Suspense>
+  );
+}
+
+// ✅ 실제 로직 컴포넌트
+function VmFailedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobIdFromQuery = searchParams?.get("jobId") ?? undefined;
@@ -31,7 +60,8 @@ export default function VmFailedPage() {
 
   const jobId = jobIdFromQuery ?? result?.jobId;
   const errorMessage =
-    result?.message || "VM 생성 중 오류가 발생했습니다. 관리자에게 문의해주세요.";
+    result?.message ||
+    "VM 생성 중 오류가 발생했습니다. 관리자에게 문의해주세요.";
   const statusText = result?.status ?? "FAILED";
 
   return (
@@ -89,28 +119,22 @@ export default function VmFailedPage() {
                 <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
                   <li>입력한 VM 스펙/팀 정보가 올바른지 다시 한 번 확인해 주세요.</li>
                   <li>같은 오류가 반복되면 운영자에게 Job ID와 함께 문의해 주세요.</li>
-                  <li>일시적인 인프라 이슈일 수 있으니, 잠시 후 다시 시도해 보셔도 좋습니다.</li>
+                  <li>
+                    일시적인 인프라 이슈일 수 있으니, 잠시 후 다시 시도해 보셔도 좋습니다.
+                  </li>
                 </ul>
               </Card>
             </div>
 
             {/* 액션 버튼 */}
             <div className="flex flex-wrap justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => router.push("/")}
-              >
+              <Button variant="outline" onClick={() => router.push("/")}>
                 대시보드로 돌아가기
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => router.push("/create-vm")}
-              >
+              <Button variant="outline" onClick={() => router.push("/create-vm")}>
                 새로 VM 생성 시도
               </Button>
-              <Button
-                onClick={() => window.location.reload()}
-              >
+              <Button onClick={() => window.location.reload()}>
                 <RefreshCcw className="mr-2 h-4 w-4" />
                 화면 새로고침
               </Button>

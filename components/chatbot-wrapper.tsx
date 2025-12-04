@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -9,47 +9,48 @@ export function ChatbotWrapper() {
   const pathname = usePathname();
   const { status, errorDetails } = useSse();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    // { text: "안녕하세요! Cloud Pilot 도우미입니다. 무엇을 도와드릴까요?", isBot: true },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasError, setHasError] = useState(false);
 
+  // ⭐ N8N 오류 메시지 챗봇 출력 처리
   useEffect(() => {
-    if (status === 'error' && errorDetails && errorDetails.summary) {
-      const errorText = `
-패키지 설치 중 오류가 발생했습니다.
+    if (status === "error" && errorDetails) {
+      const summary = (errorDetails.summary ?? "").trim();
+const rootCause = (errorDetails.rootCause ?? "").trim();
+const fix = (errorDetails.fix ?? "").trim();
 
-${errorDetails.summary}
+      const errorText = `${summary}
 
-${errorDetails.rootCause}
+${rootCause}
 
-${errorDetails.fix}
-      `.trim();
+${fix}`.trim();
 
-      const errorMessage: ChatMessage = { text: errorText, isBot: true };
-      setMessages((prev) => [...prev, errorMessage]);
-      setHasError(true);
+      if (errorText) {
+        setMessages((prev) => [...prev, { text: errorText, isBot: true }]);
+        setHasError(true);
+      }
     }
   }, [status, errorDetails]);
 
   const handleSendMessage = (messageText: string) => {
     setMessages((prev) => [...prev, { text: messageText, isBot: false }]);
-    // Placeholder for a real bot response
+
     setTimeout(() => {
       setMessages((prev) => [
         ...prev,
-        { text: "문의 주셔서 감사합니다. 관리자가 곧 답변드리겠습니다.", isBot: true },
+        {
+          text: "문의 감사합니다. 관리자가 곧 답변드릴 예정입니다.",
+          isBot: true,
+        },
       ]);
-    }, 1000);
+    }, 800);
   };
 
-  const handleErrorChange = (errorState: boolean) => {
-    setHasError(errorState);
+  const handleErrorChange = (value: boolean) => {
+    setHasError(value);
   };
 
-  if (pathname === "/login") {
-    return null;
-  }
+  if (pathname === "/login") return null;
 
   return (
     <Chatbot
