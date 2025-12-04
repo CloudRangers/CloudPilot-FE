@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Progress } from "@/components/ui/progress";
+import { useSse } from "@/lib/context/SseContext";
 
-type ProvisionStatus = "RUNNING" | "SUCCEEDED" | "FAILED";
+type ProvisionStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "error";
 
 interface ProvisionProgressPayload {
   jobId: string;
@@ -29,6 +30,8 @@ function CreatingVMContent() {
   const rawJobIds = searchParams.get("jobIds");
   const singleJobIdParam = searchParams.get("jobId");
   const batchId = searchParams.get("batchId");
+
+  const { startSseConnection } = useSse();
 
   // 단일/배치 모두 지원: ?jobId=123 또는 ?jobIds=123,124
   const jobIds = useMemo<string[]>(() => {
@@ -90,8 +93,27 @@ function CreatingVMContent() {
 
     const es = new EventSource(`${apiBaseUrl}/sse/provision/${currentJobId}`);
 
+    startSseConnection(currentJobId);
+
     const handleProgress = (event: MessageEvent) => {
       const data = JSON.parse(event.data) as ProvisionProgressPayload;
+      if (data.status === "FAILED" || data.stage === "ERROR" || data.status === "error" )  {
+    console.error("프로비저닝 실패 감지:", data);
+
+    setStatus("FAILED");
+    setDescription(
+      data.description ?? "가상머신 생성 중 오류가 발생했습니다."
+    );
+
+    setProgress(100);
+    es.close();
+
+    setTimeout(() => {
+      router.push(`/vm-failed?jobId=${currentJobId}`);
+    }, 300);
+
+    return;
+  }
 
       if (typeof data.progress === "number") {
         setProgress(data.progress);
@@ -143,34 +165,37 @@ function CreatingVMContent() {
 
     // 서버에서 name("error")로 보낸 이벤트 처리
     const handleProvisionErrorEvent = (event: Event) => {
-      const msgEvent = event as MessageEvent;
+  const msgEvent = event as MessageEvent;
 
-      if (msgEvent.data) {
-        try {
-          const data = JSON.parse(msgEvent.data) as ProvisionProgressPayload;
-          if (data.description) {
-            setDescription(data.description);
-          } else {
-            setDescription("가상머신 생성 중 오류가 발생했습니다.");
-          }
-        } catch {
-          setDescription("가상머신 생성 중 알 수 없는 오류가 발생했습니다.");
-        }
-      } else {
-        setDescription("가상머신 생성 중 오류가 발생했습니다.");
+  let errorDescription = "가상머신 생성 중 오류가 발생했습니다.";
+
+  if (msgEvent.data) {
+    try {
+      const data = JSON.parse(msgEvent.data) as ProvisionProgressPayload;
+      if (data.description) {
+        errorDescription = data.description;
       }
+    } catch {
+      errorDescription = "가상머신 생성 중 알 수 없는 오류가 발생했습니다.";
+    }
+  }
 
-      setStatus("FAILED");
-      // 실패 시에도 진행률 바를 끝까지 채워주고 싶으면 100으로 고정
-      setProgress((prev) => (prev > 0 ? prev : 100));
+  setDescription(errorDescription);
+  setStatus("FAILED");
+  setProgress(100);
 
-      es.close();
-      console.warn("[CreatingVM] SSE error 이벤트 수신, 연결 종료");
-    };
+  es.close();
+  console.warn("[CreatingVM] SSE error 이벤트 수신, 연결 종료");
+
+  // 🔥🔥🔥 라우팅 추가 (핵심 수정)
+  setTimeout(() => {
+    router.push(`/vm-failed?jobId=${currentJobId}`);
+  }, 300);
+};
 
     es.addEventListener("progress", handleProgress);
     es.addEventListener("complete", handleComplete);
-    es.addEventListener("error", handleProvisionErrorEvent);
+    es.addEventListener("provision-error", handleProvisionErrorEvent);
 
     es.onopen = () => {
       console.info("[CreatingVM] SSE 연결 성공:", currentJobId);
