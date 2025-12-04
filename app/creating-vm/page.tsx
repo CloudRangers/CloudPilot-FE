@@ -207,12 +207,12 @@ function CreatingVMContent() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8 text-center">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">가상머신 생성 중</h1>
+          <h1 className="text-4xl font-bold tracking-tight">가상머신 생성 중</h1>
           <p className="text-muted-foreground">
             {isFailed ? "작업 중 오류가 발생했습니다." : "잠시만 기다려주세요..."}
           </p>
           {totalCount > 1 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               총 {totalCount}대 중 {currentIndex + 1}번째 VM 생성 중입니다.
             </p>
           )}
@@ -246,12 +246,12 @@ export default function CreatingVMPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 -translate-y-[1cm]">
           <div className="w-full max-w-md space-y-4 text-center">
             <h1 className="text-2xl font-bold tracking-tight">
               가상머신 생성 화면 준비 중...
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-lg">
               잠시만 기다려 주세요.
             </p>
           </div>

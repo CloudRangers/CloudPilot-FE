@@ -72,6 +72,12 @@ export default function HomePage() {
     ],
     MEMBER: [
       {
+        title: "",
+        description: "",
+        icon: FileCheck,
+        href: "",
+      },
+      {
         title: "패키지 신청",
         description: "필요한 패키지나 리소스를 신청하고 진행 상황을 추적하세요.",
         icon: FileCheck,
@@ -97,7 +103,7 @@ export default function HomePage() {
         <section className="container mx-auto px-4 py-12 md:px-6 md:py-20">
 
           <div className="mx-auto max-w-3xl text-center space-y-4 mb-16">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl leading-[1.15]">
               인프라 자동 생성으로 <br />
               <span className="text-primary">더 빠른 배포</span>를 경험하세요
             </h1>
@@ -121,8 +127,10 @@ export default function HomePage() {
             </div>
           ) : (
             // 변경: flex -> grid로 고정 열수 지정 (반응형)
+          
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
               {featuresToShow.map((feature, index) => (
+                feature.title && feature.href ? (
                 <FeatureCard
                   key={index}
                   title={feature.title}
@@ -130,8 +138,13 @@ export default function HomePage() {
                   icon={feature.icon}
                   href={feature.href}
                 />
+                ): (
+                  // 🔥 빈 칸은 남기되 UI는 없음
+                  <div key={index} className="w-full h-0"></div>
+                )
               ))}
             </div>
+            
           )}
         </section>
       </main>

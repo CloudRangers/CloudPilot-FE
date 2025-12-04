@@ -139,11 +139,11 @@ export function Header() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
           {/* 로고 */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">
-                CP
-              </span>
-            </div>
+            <img
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Whisk_ea16510fc56430cb7834e78b3ccf3091dr%20%281%29_imgupscaler.ai_%EC%9D%BC%EB%B0%98%20%ED%99%95%EB%8C%80__16K-Photoroom-cyxtUobdT0S1PjVlwoZ7nC9lycmi3f.png"
+              alt="Cloud Pilot Logo"
+              className="h-12 w-12 object-contain"
+            />
             <span className="text-xl font-semibold tracking-tight">
               Cloud Pilot
             </span>
@@ -155,8 +155,8 @@ export function Header() {
               {/* 로그인 정보 */}
               {user && (
                 <div className="flex flex-col text-right">
-                  <span className="text-sm font-medium">{user.username}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-base font-medium">{user.username}</span>
+                  <span className="text-sm text-muted-foreground">
                     {user.roleName}
                   </span>
                 </div>
@@ -229,19 +229,13 @@ export function Header() {
                   </DropdownMenuTrigger>
 
                   <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem asChild>
-                      <Link href="/mypage" className="flex items-center gap-2">
+                    <DropdownMenuItem asChild className="text-base">
+                      <Link href="/mypage" className="flex items-center gap-2 text-2xl">
                         <UserCircle className="h-4 w-4" /> 마이페이지
                       </Link>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem asChild>
-                      <Link href="/vm-status" className="flex items-center gap-2">
-                        <Server className="h-4 w-4" /> VM 생성 현황
-                      </Link>
-                    </DropdownMenuItem>
-
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="text-base">
                       <Link
                         href="/package-status"
                         className="flex items-center gap-2"
@@ -250,20 +244,13 @@ export function Header() {
                       </Link>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem asChild>
-                      <Link
-                        href="/package-list"
-                        className="flex items-center gap-2"
-                      >
-                        <Package className="h-4 w-4" /> 패키지 현황
-                      </Link>
-                    </DropdownMenuItem>
+                    
 
                     {/* ADMIN 전용 */}
                     {user.roleCode === "ADMIN" && (
                       <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
+                        <DropdownMenuItem asChild className="text-base">
                           <Link href="/admin" className="flex items-center gap-2">
                             <Shield className="h-4 w-4" /> 관리자 대시보드
                           </Link>
@@ -272,10 +259,25 @@ export function Header() {
                     )}
 
                     {/* 승인 메뉴 */}
-                    {["LEADER", "HEAD", "ADMIN"].includes(user.roleCode) && (
+                    {["LEADER", "HEAD"].includes(user.roleCode) && (
                       <>
+                        <DropdownMenuItem asChild className="text-base">
+                          <Link href="/vm-status" className="flex items-center gap-2">
+                            <Server className="h-4 w-4" /> VM 생성 현황
+                          </Link>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem asChild className="text-base">
+                          <Link
+                            href="/package-list"
+                            className="flex items-center gap-2"
+                          >
+                            <Package className="h-4 w-4" /> 패키지 현황
+                          </Link>
+                        </DropdownMenuItem>
+
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
+                        <DropdownMenuItem asChild className="text-base">
                           <Link
                             href="/approval"
                             className="flex items-center gap-2"
