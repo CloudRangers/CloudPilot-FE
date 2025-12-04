@@ -107,7 +107,7 @@ export default function HomePage() {
               인프라 자동 생성으로 <br />
               <span className="text-primary">더 빠른 배포</span>를 경험하세요
             </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed">
+            <p className="text-xl text-muted-foreground leading-relaxed">
               Cloud Pilot은 복잡한 인프라 설정을 자동화하여 팀이 비즈니스 로직에 집중하도록 돕습니다.
             </p>
           </div>
