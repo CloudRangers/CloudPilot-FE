@@ -9,22 +9,12 @@ import { useSse } from "@/lib/context/SseContext";
 
 type ProvisionStatus = "RUNNING" | "SUCCEEDED" | "FAILED";
 
-interface InstallProgressPayload {
-  jobId: string;
-  stage?: string;
-  description?: string;
-  progress?: number;
-  elapsedSeconds?: number;
-  status?: ProvisionStatus;
-  logLine?: string;
-}
-
 function InstallingPackageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 🔥 SSE Context 연결
-  const { startSseConnection, status: sseStatus, errorDetails, message } = useSse();
+  // 🔥 SSE Context (여기서 status/message 안씀)
+  const { sseStates, startSseConnection } = useSse();
 
   const rawJobIds = searchParams.get("jobIds");
   const jobIds = useMemo<string[]>(() => {
@@ -40,20 +30,20 @@ function InstallingPackageContent() {
   const totalCount = jobIds.length;
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<ProvisionStatus>("RUNNING");
   const [description, setDescription] = useState("설치 작업 준비 중...");
-  const [stage, setStage] = useState<string | undefined>(undefined);
+  const [isProcessing, setIsProcessing] = useState(true);
 
   const currentJobId = jobIds[currentIndex] ?? null;
 
-  const isFailed = status === "FAILED";
-  const isCompleted =
-    status === "SUCCEEDED" &&
-    currentIndex === totalCount - 1 &&
-    progress >= 100;
+  // 🔥 현재 jobId의 SSE 상태 가져오기
+  const currentJob = currentJobId ? sseStates[currentJobId] : null;
 
-  const [isProcessing, setIsProcessing] = useState(true);
+  const progress = currentJob?.progress ?? 0;
+  const stage = currentJob?.stage;
+  const stageStatus = currentJob?.status;
+
+  const isFailed = stageStatus === "error";
+  const isDone = stageStatus === "completed";
 
   // jobIds 바뀌면 재시작
   useEffect(() => {
@@ -61,82 +51,43 @@ function InstallingPackageContent() {
     setIsProcessing(true);
   }, [rawJobIds]);
 
-  // 🔥 현재 Job ID에서 SSE 커넥션 연결
+  // 🔥 현재 jobId에서 SSE 연결
   useEffect(() => {
     if (!currentJobId || !isProcessing) return;
 
-    // Reset 상태
-    setProgress(0);
-    setStatus("RUNNING");
-    setStage(undefined);
+    setDescription(
+      totalCount > 1
+        ? `총 ${totalCount}대 중 ${currentIndex + 1}번째 VM 패키지 설치 중입니다.`
+        : "패키지 설치 시작 중..."
+    );
 
-    if (totalCount > 1) {
-      setDescription(
-        `총 ${totalCount}대 중 ${currentIndex + 1}번째 VM 패키지 설치 중입니다.`
-      );
-    } else {
-      setDescription("패키지 설치 시작 중...");
-    }
-
-    // 🔥 SSEProvider를 통한 SSE 연결
     startSseConnection(currentJobId);
-
   }, [currentJobId, currentIndex, isProcessing]);
 
-  // 🔥 SSEProvider에서 수신한 데이터로 UI 업데이트
+  // 🔥 SSE 데이터 기반 UI 업데이트
   useEffect(() => {
-    if (!isProcessing) return;
+    if (!currentJobId || !currentJob || !isProcessing) return;
 
-    if (sseStatus === "error" && errorDetails) {
+    // 오류 처리
+    if (isFailed) {
       setIsProcessing(false);
-      setStatus("FAILED");
-
-      setTimeout(() => {
-        router.push("/package-failed");
-      }, 600);
-
+      setTimeout(() => router.push("/package-failed"), 600);
       return;
     }
 
-    if (message) {
-      setDescription(message);
-    }
-
-    const newProgress = errorDetails?.progress;
-    if (typeof newProgress === "number") {
-      setProgress(newProgress);
-    }
-
-    const newStage = errorDetails?.stage;
-    if (newStage) {
-      setStage(newStage);
-
-      if (newStage === "DONE") {
-        setStatus("SUCCEEDED");
-      }
-      if (newStage === "ERROR") {
-        setStatus("FAILED");
-      }
-    }
-
-    const newStatus = errorDetails?.status;
-    if (newStatus) {
-      setStatus(newStatus);
-    }
+    // progress 갱신
+    if (currentJob.message) setDescription(currentJob.message);
 
     // Job 완료 처리
-    if (status === "SUCCEEDED" && progress >= 100) {
+    if (isDone && progress >= 100) {
       if (currentIndex < totalCount - 1) {
         setCurrentIndex((prev) => prev + 1);
       } else {
         setIsProcessing(false);
-
-        setTimeout(() => {
-          router.push("/package-complete");
-        }, 600);
+        setTimeout(() => router.push("/package-complete"), 600);
       }
     }
-  }, [sseStatus, errorDetails, message, progress, status]);
+  }, [currentJob, currentJobId, progress, stageStatus, isProcessing]);
 
   if (totalCount === 0) {
     return (
@@ -174,12 +125,16 @@ function InstallingPackageContent() {
       case "DONE":
         return "설치 완료!";
       case "ERROR":
-      case "FAILED":
         return "설치 오류 발생!";
       default:
         return "준비 중...";
     }
   };
+
+  const isCompleted =
+    stageStatus === "completed" &&
+    currentIndex === totalCount - 1 &&
+    progress >= 100;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">

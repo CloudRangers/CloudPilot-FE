@@ -7,17 +7,26 @@ import { useSse } from "@/lib/context/SseContext";
 
 export function ChatbotWrapper() {
   const pathname = usePathname();
-  const { status, errorDetails } = useSse();
+
+  // 🔥 전체 jobId 상태 가져오기
+  const { sseStates } = useSse();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasError, setHasError] = useState(false);
 
+  // 🔥 상태 중 마지막 error 찾기
+  const latestError = (() => {
+    const entries = Object.values(sseStates);
+    const errors = entries.filter((s) => s.status === "error");
+    return errors.length > 0 ? errors[errors.length - 1] : null;
+  })();
+
   // ⭐ N8N 오류 메시지 챗봇 출력 처리
   useEffect(() => {
-    if (status === "error" && errorDetails) {
-      const summary = (errorDetails.summary ?? "").trim();
-const rootCause = (errorDetails.rootCause ?? "").trim();
-const fix = (errorDetails.fix ?? "").trim();
+    if (latestError && latestError.errorDetails) {
+      const summary = (latestError.errorDetails.summary ?? "").trim();
+      const rootCause = (latestError.errorDetails.rootCause ?? "").trim();
+      const fix = (latestError.errorDetails.fix ?? "").trim();
 
       const errorText = `${summary}
 
@@ -30,7 +39,7 @@ ${fix}`.trim();
         setHasError(true);
       }
     }
-  }, [status, errorDetails]);
+  }, [latestError]);
 
   const handleSendMessage = (messageText: string) => {
     setMessages((prev) => [...prev, { text: messageText, isBot: false }]);
