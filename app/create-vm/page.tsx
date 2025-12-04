@@ -421,7 +421,7 @@ function CreateVMPageInner() {
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="vm-name">VM 이름</Label>
+                    <Label htmlFor="vm-name" className="text-base">VM 이름</Label>
                     <Input
                       id="vm-name"
                       placeholder="예: production-server-01"
@@ -431,7 +431,7 @@ function CreateVMPageInner() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="vm-count">VM 개수</Label>
+                    <Label htmlFor="vm-count" className="text-base">VM 개수</Label>
                     <Input
                       id="vm-count"
                       type="number"
@@ -444,10 +444,10 @@ function CreateVMPageInner() {
                   </div>
 
                   <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <h3 className="font-semibold text-sm">프라이빗 VM 옵션</h3>
+                    <h3 className="font-semibold text-lg">프라이빗 VM 옵션</h3>
 
                     <div className="space-y-2">
-                      <Label htmlFor="private-cpu">CPU (vCPU)</Label>
+                      <Label htmlFor="private-cpu" className="text-base">CPU (vCPU)</Label>
                       <Select value={cpu} onValueChange={setCpu}>
                         <SelectTrigger id="private-cpu">
                           <SelectValue placeholder="CPU 선택" />
@@ -468,7 +468,7 @@ function CreateVMPageInner() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="private-memory">메모리 (GB)</Label>
+                      <Label htmlFor="private-memory" className="text-base">메모리 (GB)</Label>
                       <Select value={memory} onValueChange={setMemory}>
                         <SelectTrigger id="private-memory">
                           <SelectValue placeholder="메모리 선택" />
@@ -489,7 +489,7 @@ function CreateVMPageInner() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="private-storage">저장공간 (GB)</Label>
+                      <Label htmlFor="private-storage" className="text-base">저장공간 (GB)</Label>
                       <Input
                         id="private-storage"
                         type="number"
@@ -505,8 +505,8 @@ function CreateVMPageInner() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="private-os">운영체제</Label>
-                      <Select
+                      <Label htmlFor="private-os" className="text-base">운영체제</Label>
+                      <Select 
                         value={os}
                         onValueChange={(value) => setOs(value)}
                         disabled={isLoadingOS || !!osLoadError}
@@ -524,7 +524,7 @@ function CreateVMPageInner() {
                         </SelectTrigger>
                         <SelectContent>
                           {osImages.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                            <div className="px-3 py-2 text-base text-muted-foreground">
                               사용 가능한 OS가 없습니다.
                             </div>
                           ) : (
@@ -553,7 +553,7 @@ function CreateVMPageInner() {
 
             <div className="lg:col-span-1">
               <Card className="p-6 sticky top-20">
-                <h3 className="font-semibold mb-4">이전 생성 스펙</h3>
+                <h3 className="font-semibold mb-4 text-lg">이전 생성 스펙</h3>
                 {previousSpecs.map((spec, idx) => (
                   <div
                     key={idx}
@@ -562,9 +562,9 @@ function CreateVMPageInner() {
                   >
                     <div className="flex items-center gap-2">
                       <Server className="h-4 w-4 text-primary" />
-                      <span className="font-medium text-sm">{spec.name}</span>
+                      <span className="font-medium text-lg">{spec.name}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                       {spec.cpu} vCPU / {spec.memory}GB / {spec.storage}GB /{" "}
                       {spec.os}
                     </p>
