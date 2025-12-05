@@ -129,7 +129,10 @@ export const SseProvider = ({ children }: { children: ReactNode }) => {
       // 이미 연결된 SSE가 있다면 먼저 종료
       if (eventSources[jobId]) stopSseConnection(jobId);
 
-      const es = new EventSource(`http://localhost:8080/sse/${jobId}`);
+      const es = new EventSource(
+  `${process.env.NEXT_PUBLIC_API_BASE_URL}/sse/${jobId}`
+);
+
 
       // EventSource 저장
       setEventSources((prev) => ({
