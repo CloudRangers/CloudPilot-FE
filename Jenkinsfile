@@ -29,27 +29,23 @@ pipeline {
             }
         }
 
-        stage('Install & Build (Jenkins)') {
-            steps {
-                sh '''
-                    rm -f package-lock.json
-                    npm install --force
-                    npm run build
-                '''
-            }
-            
-        }
+        
 
         stage('Push to ECR') {
             steps {
                 script {
+                    echo "📄 Reading .env.local ..."
+                    def envVars = readProperties file: '.env.local'
+
                     sh """
                         echo "🔐 Logging in to ECR..."
                         aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
                             | docker login --username AWS --password-stdin ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
 
-                        echo "🐳 Building FE Docker Image..."
-                        docker build -t cloudpilot/frontend:latest .
+                        echo "🐳 Building FE Docker Image with Build Args..."
+                        docker build \
+                            --build-arg NEXT_PUBLIC_API_BASE_URL=${envVars.NEXT_PUBLIC_API_BASE_URL} \
+                            -t cloudpilot/frontend:latest .
 
                         echo "🏷 Tagging Image..."
                         docker tag cloudpilot/frontend:latest ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
