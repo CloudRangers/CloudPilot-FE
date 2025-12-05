@@ -93,27 +93,48 @@ function CreatingVMContent() {
 
     const es = new EventSource(`${apiBaseUrl}/sse/provision/${currentJobId}`);
 
+    // (옵션) 글로벌 SSE 컨텍스트도 같이 사용 중이면 호출
     startSseConnection(currentJobId);
 
+    // ✅ progress 이벤트: JSON.parse 안전하게 + 실패 시 바로 vm-failed로 이동
     const handleProgress = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as ProvisionProgressPayload;
-      if (data.status === "FAILED" || data.stage === "ERROR" || data.status === "error" )  {
-    console.error("프로비저닝 실패 감지:", data);
+      let data: ProvisionProgressPayload | null = null;
 
-    setStatus("FAILED");
-    setDescription(
-      data.description ?? "가상머신 생성 중 오류가 발생했습니다."
-    );
+      try {
+        data = JSON.parse(event.data) as ProvisionProgressPayload;
+      } catch (e) {
+        console.warn(
+          "[CreatingVM] progress 이벤트 JSON 파싱 실패, raw data =",
+          event.data,
+          e
+        );
+        // JSON이 아니면 그냥 무시 (UI만 안 깨지게)
+        return;
+      }
 
-    setProgress(100);
-    es.close();
+      if (!data) return;
 
-    setTimeout(() => {
-      router.push(`/vm-failed?jobId=${currentJobId}`);
-    }, 300);
+      // 실패 상태 감지 시 바로 실패 처리 + 라우팅
+      if (
+        data.status === "FAILED" ||
+        data.stage === "ERROR" ||
+        data.status === "error"
+      ) {
+        console.error("프로비저닝 실패 감지 (progress 이벤트):", data);
 
-    return;
-  }
+        setStatus("FAILED");
+        setDescription(
+          data.description ?? "가상머신 생성 중 오류가 발생했습니다."
+        );
+        setProgress(100);
+        es.close();
+
+        setTimeout(() => {
+          router.push(`/vm-failed?jobId=${currentJobId}`);
+        }, 300);
+
+        return;
+      }
 
       if (typeof data.progress === "number") {
         setProgress(data.progress);
@@ -126,12 +147,31 @@ function CreatingVMContent() {
       }
     };
 
+    // ✅ complete 이벤트: JSON.parse 안전하게
     const handleComplete = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as ProvisionProgressPayload;
+      let data: ProvisionProgressPayload | null = null;
 
-      setProgress(typeof data.progress === "number" ? data.progress : 100);
-      if (data.description) {
-        setDescription(data.description);
+      try {
+        data = JSON.parse(event.data) as ProvisionProgressPayload;
+      } catch (e) {
+        console.warn(
+          "[CreatingVM] complete 이벤트 JSON 파싱 실패, raw data =",
+          event.data,
+          e
+        );
+        // 마지막 complete인데 JSON이 아니면 그냥 100% 처리 + generic 메시지
+        setProgress(100);
+        setDescription("가상머신 생성이 완료되었습니다.");
+        setStatus("SUCCEEDED");
+      }
+
+      if (data) {
+        setProgress(
+          typeof data.progress === "number" ? data.progress : 100
+        );
+        if (data.description) {
+          setDescription(data.description);
+        }
       }
 
       // 아직 남은 VM이 있다면 다음 job으로 넘어감
@@ -163,35 +203,51 @@ function CreatingVMContent() {
       }, 500);
     };
 
-    // 서버에서 name("error")로 보낸 이벤트 처리
+    // ✅ 서버에서 name("provision-error")로 보낸 이벤트 처리 + vm-failed 연동
     const handleProvisionErrorEvent = (event: Event) => {
-  const msgEvent = event as MessageEvent;
+      const msgEvent = event as MessageEvent;
+      let payload: any | null = null;
+      let errorDescription = "가상머신 생성 중 오류가 발생했습니다.";
 
-  let errorDescription = "가상머신 생성 중 오류가 발생했습니다.";
-
-  if (msgEvent.data) {
-    try {
-      const data = JSON.parse(msgEvent.data) as ProvisionProgressPayload;
-      if (data.description) {
-        errorDescription = data.description;
+      if (msgEvent.data) {
+        try {
+          payload = JSON.parse(msgEvent.data);
+          if (payload.description) {
+            errorDescription = payload.description;
+          }
+        } catch (e) {
+          console.warn(
+            "[CreatingVM] error 이벤트 JSON 파싱 실패, raw data =",
+            msgEvent.data,
+            e
+          );
+          errorDescription =
+            "가상머신 생성 중 알 수 없는 오류가 발생했습니다.";
+        }
       }
-    } catch {
-      errorDescription = "가상머신 생성 중 알 수 없는 오류가 발생했습니다.";
-    }
-  }
 
-  setDescription(errorDescription);
-  setStatus("FAILED");
-  setProgress(100);
+      setDescription(errorDescription);
+      setStatus("FAILED");
+      // 실패 시에도 진행률 바를 끝까지 채우고 싶으면 100으로
+      setProgress((prev) => (prev > 0 ? prev : 100));
 
-  es.close();
-  console.warn("[CreatingVM] SSE error 이벤트 수신, 연결 종료");
+      es.close();
+      console.warn("[CreatingVM] SSE error 이벤트 수신, 연결 종료");
 
-  // 🔥🔥🔥 라우팅 추가 (핵심 수정)
-  setTimeout(() => {
-    router.push(`/vm-failed?jobId=${currentJobId}`);
-  }, 300);
-};
+      // 🔥 vm-failed에서 볼 수 있게 lastProvisionResult 저장 (payload가 있으면)
+      if (payload) {
+        try {
+          localStorage.setItem("lastProvisionResult", JSON.stringify(payload));
+        } catch {
+          // localStorage 실패해도 앱이 죽진 않게 무시
+        }
+      }
+
+      const nextJobId = currentJobId;
+      router.replace(
+        nextJobId ? `/vm-failed?jobId=${nextJobId}` : "/vm-failed"
+      );
+    };
 
     es.addEventListener("progress", handleProgress);
     es.addEventListener("complete", handleComplete);
@@ -211,7 +267,14 @@ function CreatingVMContent() {
       console.log("[CreatingVM] SSE 연결 해제, jobId =", currentJobId);
       es.close();
     };
-  }, [currentJobId, currentIndex, totalCount, batchId, router]);
+  }, [
+    currentJobId,
+    currentIndex,
+    totalCount,
+    batchId,
+    router,
+    startSseConnection,
+  ]);
 
   if (totalCount === 0) {
     return (
@@ -220,7 +283,7 @@ function CreatingVMContent() {
           <h1 className="text-2xl font-bold tracking-tight">
             작업 정보를 찾을 수 없습니다
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             유효한 jobId 또는 jobIds 파라미터가 필요합니다.
           </p>
         </div>
@@ -250,7 +313,7 @@ function CreatingVMContent() {
             className="absolute -top-8 transition-all duration-150 ease-linear"
             style={{ left: `${progress}%`, transform: "translateX(-50%)" }}
           >
-            <div className="text-4xl animate-bounce">
+            <div className="animate-bounce text-4xl">
               {isFailed ? "🙁" : "💻"}
             </div>
           </div>
@@ -258,7 +321,7 @@ function CreatingVMContent() {
 
         <div className="space-y-2">
           <p className="text-2xl font-semibold text-primary">{progress}%</p>
-          <p className="text-sm text-muted-foreground whitespace-pre-line">
+          <p className="whitespace-pre-line text-sm text-muted-foreground">
             {description}
           </p>
         </div>
@@ -276,7 +339,7 @@ export default function CreatingVMPage() {
             <h1 className="text-2xl font-bold tracking-tight">
               가상머신 생성 화면 준비 중...
             </h1>
-            <p className="text-muted-foreground text-lg">
+            <p className="text-lg text-muted-foreground">
               잠시만 기다려 주세요.
             </p>
           </div>

@@ -7,11 +7,23 @@ import { Footer } from "@/components/footer"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Server, CheckCircle2, Clock, AlertCircle, ChevronDown, Package } from "lucide-react"
+import {
+  Server,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ChevronDown,
+  Package,
+} from "lucide-react"
 import { apiClient } from "@/lib/api/base-client"
 
 // ✅ 공통 타입으로 통일 (중복 정의 제거)
-import type { ApiResponse, MyPageData, MyPageVm } from "@/types/mypage"
+import type {
+  ApiResponse,
+  MyPageData,
+  MyPageVm,
+  VmAssignedMember,
+} from "@/types/mypage"
 
 import {
   Dialog,
@@ -63,7 +75,8 @@ export default function MemberMyPage() {
   }
 
   const getStatusIcon = (status: MyPageVm["status"]) => {
-    switch (status.toUpperCase()) {
+    const upper = (status ?? "").toString().toUpperCase()
+    switch (upper) {
       case "RUNNING":
         return <CheckCircle2 className="h-5 w-5 text-green-500" />
       case "STOPPED":
@@ -76,7 +89,8 @@ export default function MemberMyPage() {
   }
 
   const getStatusText = (status: MyPageVm["status"]) => {
-    switch (status.toUpperCase()) {
+    const upper = (status ?? "").toString().toUpperCase()
+    switch (upper) {
       case "RUNNING":
         return "실행 중"
       case "STOPPED":
@@ -104,6 +118,15 @@ export default function MemberMyPage() {
     )}`
 
     window.open(url, "_blank", "noopener,noreferrer")
+  }
+
+  const getAssignedMembersForVm = (vm: MyPageVm): VmAssignedMember[] => {
+    const raw = vm.assignedMembers
+    if (!raw) return []
+    return raw.filter((m) => {
+      const code = (m.roleCode ?? "").toUpperCase()
+      return code === "LEADER" || code === "MEMBER"
+    })
   }
 
   if (loading) {
@@ -152,7 +175,168 @@ export default function MemberMyPage() {
     )
   }
 
-  const { username, empno, teamName, roleName, vms } = myPage
+  const { userId, username, empno, teamName, roleName, vms } = myPage
+
+  // 🔹 VM 분류: 담당자 기준으로 나누기
+  const assignedToMe: MyPageVm[] = vms.filter(
+    (vm) =>
+      vm.assignedMembers &&
+      vm.assignedMembers.length > 0 &&
+      vm.assignedMembers.some((m) => m.userId === userId),
+  )
+
+  const assignedToOthers: MyPageVm[] = vms.filter(
+    (vm) =>
+      vm.assignedMembers &&
+      vm.assignedMembers.length > 0 &&
+      !vm.assignedMembers.some((m) => m.userId === userId),
+  )
+
+  const unassignedVms: MyPageVm[] = vms.filter(
+    (vm) => !vm.assignedMembers || vm.assignedMembers.length === 0,
+  )
+
+  // 🔹 공통 VM 카드 렌더링 함수
+  const renderVmCard = (vm: MyPageVm) => {
+    const assignedMembers = getAssignedMembersForVm(vm)
+
+    return (
+      <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
+        <div
+          className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+          onClick={() => toggleServerDetails(vm.id)}
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3 flex-1">
+              <div className="rounded-md bg-primary/10 p-2">
+                <Server className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">{vm.name}</h3>
+                  <span className="text-xs px-2 py-1 rounded-full bg-muted">
+                    {vm.type}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                  <div>CPU: {vm.cpu ?? "-"} vCPU</div>
+                  <div>메모리: {vm.memory ?? "-"} GB</div>
+                  <div>스토리지: {vm.storage ?? "-"} GB</div>
+                  <div>OS: {vm.os || "-"}</div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  생성일: {formatDateTime(vm.createdAt)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  담당자:{" "}
+                  {assignedMembers.length > 0
+                    ? assignedMembers
+                        .map(
+                          (m) =>
+                            m.name ??
+                            m.username ??
+                            "이름 없음",
+                        )
+                        .join(", ")
+                    : "담당자 미지정"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {getStatusIcon(vm.status)}
+              <span className="text-sm font-medium">
+                {getStatusText(vm.status)}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${
+                  expandedServers.has(vm.id) ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+
+        {expandedServers.has(vm.id) && (
+          <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
+            <h5 className="font-semibold mb-3 flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              상세 정보
+            </h5>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground mb-1">IP 주소</p>
+                <p className="font-medium">{vm.ipAddress || "-"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-1">마지막 업데이트</p>
+                <p className="font-medium">
+                  {formatDateTime(vm.lastUpdated)}
+                </p>
+              </div>
+
+              {/* 🔹 할당된 팀원 정보 */}
+              <div className="col-span-2">
+                <p className="text-muted-foreground mb-2">할당된 팀원</p>
+                {assignedMembers.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {assignedMembers.map((m, idx) => (
+                      <Badge
+                        key={idx}
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        {m.name ?? m.username ?? "이름 없음"}
+                        {m.employeeId ? ` (${m.employeeId})` : ""}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    할당된 팀원이 없습니다.
+                  </span>
+                )}
+              </div>
+
+              <div className="col-span-2">
+                <p className="text-muted-foreground mb-2">설치된 패키지</p>
+                <div className="flex flex-wrap gap-2">
+                  {vm.packages?.length ? (
+                    vm.packages.map((pkg, idx) => (
+                      <Badge
+                        key={idx}
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        {pkg}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      등록된 패키지가 없습니다.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 🔹 Grafana 상세 모니터링 버튼 */}
+            <div className="mt-4 flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSelectedVm(vm)
+                  setDetailOpen(true)
+                }}
+              >
+                Grafana 상세 모니터링
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -162,7 +346,9 @@ export default function MemberMyPage() {
         <div className="container px-4 py-8 md:px-6">
           <div className="mb-6">
             <h1 className="text-3xl font-bold tracking-tight">마이페이지</h1>
-            <p className="mt-2 text-muted-foreground">내 정보와 생성한 가상머신을 관리하세요</p>
+            <p className="mt-2 text-muted-foreground">
+              내 정보와 생성한 가상머신을 관리하세요
+            </p>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
@@ -193,8 +379,8 @@ export default function MemberMyPage() {
 
             {/* VM 리스트 카드 */}
             <div className="lg:col-span-2">
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
+              <Card className="p-6 space-y-6">
+                <div className="flex items-center justify-between mb-2">
                   <h2 className="text-lg font-semibold">내 가상머신</h2>
                   
                 </div>
@@ -212,100 +398,54 @@ export default function MemberMyPage() {
                     </button>
                   </p>
                 ) : (
-                  <div className="space-y-4">
-                    {vms.map((vm) => (
-                      <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
-                        <div
-                          className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                          onClick={() => toggleServerDetails(vm.id)}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3 flex-1">
-                              <div className="rounded-md bg-primary/10 p-2">
-                                <Server className="h-5 w-5 text-primary" />
-                              </div>
-                              <div className="flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="font-semibold">{vm.name}</h3>
-                                  <span className="text-xs px-2 py-1 rounded-full bg-muted">
-                                    {vm.type}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                  <div>CPU: {vm.cpu ?? "-"} vCPU</div>
-                                  <div>메모리: {vm.memory ?? "-"} GB</div>
-                                  <div>스토리지: {vm.storage ?? "-"} GB</div>
-                                  <div>OS: {vm.os || "-"}</div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  생성일: {formatDateTime(vm.createdAt)}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {getStatusIcon(vm.status)}
-                              <span className="text-sm font-medium">{getStatusText(vm.status)}</span>
-                              <ChevronDown
-                                className={`h-4 w-4 transition-transform ${
-                                  expandedServers.has(vm.id) ? "rotate-180" : ""
-                                }`}
-                              />
-                            </div>
-                          </div>
+                  <div className="space-y-6">
+                    {/* 내가 담당 중인 VM */}
+                    <section>
+                      <h3 className="text-base font-semibold mb-2">
+                        내가 담당 중인 VM
+                      </h3>
+                      {assignedToMe.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          현재 내가 담당 중인 VM이 없습니다.
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {assignedToMe.map((vm) => renderVmCard(vm))}
                         </div>
+                      )}
+                    </section>
 
-                        {expandedServers.has(vm.id) && (
-                          <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
-                            <h5 className="font-semibold mb-3 flex items-center gap-2">
-                              <Package className="h-4 w-4" />
-                              상세 정보
-                            </h5>
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <p className="text-muted-foreground mb-1">IP 주소</p>
-                                <p className="font-medium">{vm.ipAddress || "-"}</p>
-                              </div>
-                              <div>
-                                <p className="text-muted-foreground mb-1">마지막 업데이트</p>
-                                <p className="font-medium">
-                                  {formatDateTime(vm.lastUpdated)}
-                                </p>
-                              </div>
-                              <div className="col-span-2">
-                                <p className="text-muted-foreground mb-2">설치된 패키지</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {vm.packages?.length
-                                    ? vm.packages.map((pkg, idx) => (
-                                        <Badge key={idx} variant="secondary" className="text-xs">
-                                          {pkg}
-                                        </Badge>
-                                      ))
-                                    : (
-                                      <span className="text-xs text-muted-foreground">
-                                        등록된 패키지가 없습니다.
-                                      </span>
-                                      )}
-                                </div>
-                              </div>
-                            </div>
+                    {/* 다른 팀원이 담당 중인 VM */}
+                    <section>
+                      <h3 className="text-base font-semibold mb-2">
+                        팀에서 운영 중인 VM (다른 팀원 담당)
+                      </h3>
+                      {assignedToOthers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          다른 팀원이 담당 중인 VM이 없습니다.
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {assignedToOthers.map((vm) => renderVmCard(vm))}
+                        </div>
+                      )}
+                    </section>
 
-                            {/* 🔹 Grafana 상세 모니터링 버튼 */}
-                            <div className="mt-4 flex justify-end">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedVm(vm)
-                                  setDetailOpen(true)
-                                }}
-                              >
-                                Grafana 상세 모니터링
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {/* 아직 담당자 없는 VM */}
+                    <section>
+                      <h3 className="text-base font-semibold mb-2">
+                        아직 담당자가 없는 VM
+                      </h3>
+                      {unassignedVms.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          할당되지 않은 VM이 없습니다.
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {unassignedVms.map((vm) => renderVmCard(vm))}
+                        </div>
+                      )}
+                    </section>
                   </div>
                 )}
               </Card>
@@ -363,13 +503,13 @@ export default function MemberMyPage() {
                 </p>
               </Card>
 
-              <Button
+              {/* <Button
                 size="sm"
                 variant="outline"
                 onClick={() => openGrafanaForVm(selectedVm.name)}
               >
                 Grafana 상세 대시보드 열기
-              </Button>
+              </Button> */}
             </div>
           )}
         </DialogContent>

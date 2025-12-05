@@ -6,42 +6,51 @@ import { Card } from "@/components/ui/card";
 import { vcenterApi, VCenterSummary } from "@/lib/api/vcenter";
 import { Cpu, Power, PowerOff, AlertTriangle } from "lucide-react";
 
-interface VCenterSummaryCardsProps {
-  teamId?: number | null;
-}
+const defaultSummary: VCenterSummary = {
+  totalVms: 0,
+  poweredOn: 0,
+  poweredOff: 0,
+  suspended: 0,
+  unknown: 0,
+};
 
-export function VCenterSummaryCards({ teamId }: VCenterSummaryCardsProps) {
+// NaN / null / undefined 방어용 헬퍼
+const safe = (v: number | null | undefined): number =>
+  typeof v === "number" && !Number.isNaN(v) ? v : 0;
+
+export function VCenterSummaryCards() {
   const [summary, setSummary] = useState<VCenterSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchSummary = async () => {
+    const load = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // 🔹 teamId 있으면 쿼리에 붙여서 호출
-        const res = await vcenterApi.getSummary(
-          typeof teamId === "number" ? teamId : undefined
-        );
+        const res = await vcenterApi.getSummary(); // ApiResponse<VCenterSummary>
 
-        if (!res.success || !res.data) {
-          setError("vCenter 요약 정보 조회 실패");
+        // ✅ BE에서 success=false로 온 경우만 에러로
+        if (!res.success) {
+          setError(res.message ?? "vCenter 요약 정보 조회 실패");
+          setSummary(null);
           return;
         }
 
-        setSummary(res.data);
-      } catch (e) {
-        console.error("vCenter summary fetch error", e);
-        setError("vCenter 요약 정보 조회 중 오류가 발생했습니다.");
+        // ✅ data가 없으면 기본값(전부 0)
+        setSummary(res.data ?? defaultSummary);
+      } catch (err) {
+        console.error("[Summary] fetch error:", err);
+        setError("vCenter 요약 정보 조회 중 오류 발생");
+        setSummary(null);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSummary();
-  }, [teamId]);
+    load();
+  }, []);
 
   if (loading) {
     return (
@@ -58,52 +67,53 @@ export function VCenterSummaryCards({ teamId }: VCenterSummaryCardsProps) {
 
   if (error || !summary) {
     return (
-      <div className="mb-4 text-sm text-red-500">
-        {error ?? "vCenter 요약 정보를 불러오지 못했습니다."}
-      </div>
+      <p className="text-sm text-red-500 mb-4">
+        {error ?? "Summary 데이터를 불러오지 못했습니다."}
+      </p>
     );
   }
 
   const { totalVms, poweredOn, poweredOff, suspended, unknown } = summary;
-  const otherStates = suspended + unknown;
+
+  // ✅ 안전한 숫자 변환
+  const total = safe(totalVms);
+  const on = safe(poweredOn);
+  const off = safe(poweredOff);
+  const susp = safe(suspended);
+  const unk = safe(unknown);
+  const other = susp + unk;
 
   return (
     <div className="grid gap-4 md:grid-cols-4 mb-8">
-      {/* 총 VM 수 */}
       <Card className="p-4 flex items-center gap-3">
         <Cpu className="h-6 w-6 text-blue-500" />
         <div>
           <div className="text-xs text-muted-foreground mb-1">총 VM 수</div>
-          <div className="text-2xl font-bold">{totalVms}</div>
+          <div className="text-2xl font-bold">{total}</div>
         </div>
       </Card>
 
-      {/* 실행 중 */}
       <Card className="p-4 flex items-center gap-3">
         <Power className="h-6 w-6 text-green-500" />
         <div>
           <div className="text-xs text-muted-foreground mb-1">실행 중</div>
-          <div className="text-2xl font-bold">{poweredOn}</div>
+          <div className="text-2xl font-bold">{on}</div>
         </div>
       </Card>
 
-      {/* 전원 꺼짐 */}
       <Card className="p-4 flex items-center gap-3">
         <PowerOff className="h-6 w-6 text-orange-500" />
         <div>
           <div className="text-xs text-muted-foreground mb-1">전원 꺼짐</div>
-          <div className="text-2xl font-bold">{poweredOff}</div>
+          <div className="text-2xl font-bold">{off}</div>
         </div>
       </Card>
 
-      {/* 기타 상태 (Suspended + Unknown) */}
       <Card className="p-4 flex items-center gap-3">
         <AlertTriangle className="h-6 w-6 text-yellow-500" />
         <div>
-          <div className="text-xs text-muted-foreground mb-1">
-            기타 상태 (Susp/Unknown)
-          </div>
-          <div className="text-2xl font-bold">{otherStates}</div>
+          <div className="text-xs text-muted-foreground mb-1">기타 상태</div>
+          <div className="text-2xl font-bold">{other}</div>
         </div>
       </Card>
     </div>

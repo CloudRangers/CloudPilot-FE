@@ -1,4 +1,3 @@
-// src/components/vcenter-vm-table.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -16,13 +15,20 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowDownUp } from "lucide-react";
 
-import { vcenterApi, VCenterVm } from "@/lib/api/vcenter";
+import { vcenterApi, LiveVcenterVm } from "@/lib/api/vcenter";
 import { prometheusApi, VmMetricSummary } from "@/lib/api/prometheus";
 
-function formatMemoryGiB(miB: number): string {
-  if (!miB && miB !== 0) return "-";
-  const gib = miB / 1024;
-  return `${gib.toFixed(1)} GiB`;
+/* -----------------------------
+ * 메모리 / 디스크 GB 표기
+ * ----------------------------- */
+function formatMemoryGiB(gb: number | null | undefined): string {
+  if (gb == null) return "-";
+  return `${gb} GB`;
+}
+
+function formatDiskGiB(gb: number | null | undefined): string {
+  if (gb == null) return "-";
+  return `${gb} GB`;
 }
 
 function getPowerStateBadgeClass(powerState: string) {
@@ -36,25 +42,24 @@ function getPowerStateBadgeClass(powerState: string) {
   return "bg-yellow-500/10 text-yellow-600 border-yellow-500/20";
 }
 
-// 정렬 키: 이름 / 상태
 type SortKey = "name" | "powerState";
 
-interface VCenterVmTableProps {
-  teamId?: number | null;
-  /** ✅ 행 클릭 시 VM 정보를 상위 컴포넌트로 올리고 싶을 때 사용 */
-  onVmClick?: (vm: VCenterVm) => void;
+interface Props {
+  onVmClick?: (vm: LiveVcenterVm) => void;
 }
 
-// Prometheus 값이 0~1 로 올 수도, 0~100 으로 올 수도 있을 때 안전하게 퍼센트로 바꾸는 헬퍼
 function toPercent(value: number | null | undefined): number | null {
   if (value == null) return null;
-  // 0~1 범위면 100 곱하고, 그 이상이면 있는 그대로 사용
+  // 0~1 로 오면 퍼센트로 변환, 0~100 이면 그대로
   if (value <= 1) return Math.round(value * 100);
   return Math.round(value);
 }
 
-export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
-  const [vms, setVms] = useState<VCenterVm[]>([]);
+export function VCenterVmTable({ onVmClick }: Props) {
+  const [vms, setVms] = useState<LiveVcenterVm[]>([]);
+  const [metrics, setMetrics] =
+    useState<Record<string, VmMetricSummary> | null>(null);
+
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,27 +67,32 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortAsc, setSortAsc] = useState(true);
 
-  // 🔹 Prometheus 메트릭 (vmName 또는 vmId 를 키로 사용하는 맵)
-  const [metrics, setMetrics] =
-    useState<Record<string, VmMetricSummary> | null>(null);
-
-  // 🔹 vCenter VM + Prometheus 메트릭 동시에 가져오기
+  /* -----------------------------
+   * vCenter 실시간 목록 + Prometheus 메트릭 동시 조회
+   *  → 우리 팀 기준으로 필터링
+   * ----------------------------- */
   useEffect(() => {
-    const fetchData = async () => {
+    const load = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const effectiveTeamId =
-          typeof teamId === "number" ? teamId : undefined;
+        // ⭐ localStorage 에서 teamId 읽기
+        const teamIdStr =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("teamId")
+            : null;
+        const teamId = teamIdStr ? Number(teamIdStr) : undefined;
 
         const [vmRes, metricRes] = await Promise.all([
-          vcenterApi.getAllVms(effectiveTeamId),
-          prometheusApi.getVmMetrics(effectiveTeamId),
+          vcenterApi.getTeamVms(teamId), // ✅ 우리 팀 vCenter VM (실시간 + DB 매핑)
+          prometheusApi.getVmMetrics(teamId), // ✅ 메트릭도 같은 teamId 기준
         ]);
 
-        if (!vmRes.success) {
-          setError("vCenter VM 목록 조회 실패");
+        if (!vmRes.success || !vmRes.data) {
+          setError(vmRes.message ?? "vCenter VM 목록 조회 실패");
+          setVms([]);
+          setMetrics(null);
           return;
         }
 
@@ -94,89 +104,66 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
           setMetrics(null);
         }
       } catch (err) {
-        console.error("vCenter VM/메트릭 조회 중 오류:", err);
-        setError("vCenter VM/메트릭 조회 중 오류가 발생했습니다.");
+        console.error("[VM Table] load error:", err);
+        setError("vCenter VM/메트릭 조회 중 오류 발생");
+        setVms([]);
+        setMetrics(null);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [teamId]);
+    load();
+  }, []);
 
-  // 🔹 특정 VM에 해당하는 Prometheus 메트릭 찾기 (이름 우선, 없으면 vmId)
-  const getMetricForVm = (vm: VCenterVm): VmMetricSummary | undefined => {
+  /* -----------------------------
+   * 특정 VM의 Prometheus 메트릭 찾기
+   * ----------------------------- */
+  const getMetric = (vm: LiveVcenterVm) => {
     if (!metrics) return undefined;
-
-    // BE 가 vmName 을 키로 줄 가능성이 높아서 이름 먼저
-    const byName = metrics[vm.name];
-    if (byName) return byName;
-
-    // 혹시 vmId 기준으로 올 때 대비해서 fallback
-    const byId = metrics[vm.vmId];
-    if (byId) return byId;
-
-    return undefined;
+    // 우선 이름으로 찾고, 안 나오면 vmId 로도 시도
+    return metrics[vm.name] ?? (vm.vmId ? metrics[vm.vmId] : undefined);
   };
 
-  // 🔹 메트릭 뱃지 렌더링
-  const renderMetricBadge = (vm: VCenterVm) => {
-    const metric = getMetricForVm(vm);
+  const renderMetricBadge = (vm: LiveVcenterVm) => {
+    const m = getMetric(vm);
 
-    if (!metrics || !metric || metric.metricsAvailable === false) {
-      // 아직 Prometheus 미연동 / 대상 없음
+    // 🔸 hasMetrics 기반으로 처리
+    if (!m || m.hasMetrics === false) {
       return (
-        <Badge
-          variant="outline"
-          className="px-2 py-0.5 text-xs bg-gray-500/10 text-gray-600 border-gray-500/20"
-        >
-          메트릭 미연동
+        <Badge className="px-2 py-0.5 text-xs bg-gray-500/10 text-gray-600 border-gray-500/20">
+          메트릭 없음
         </Badge>
       );
     }
 
-    const cpu = toPercent(metric.cpuUsage);
-    const mem = toPercent(metric.memoryUsage);
-
-    // 값이 하나도 없으면 그냥 "연동됨" 정도만
-    if (cpu == null && mem == null) {
-      return (
-        <Badge
-          variant="outline"
-          className="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-600 border-blue-500/20"
-        >
-          메트릭 연동됨
-        </Badge>
-      );
-    }
-
-    const cpuText = cpu != null ? `CPU ${cpu}%` : "";
-    const memText = mem != null ? `MEM ${mem}%` : "";
-    const label = [cpuText, memText].filter(Boolean).join(" / ");
+    const cpu = toPercent(m.cpuUsage ?? null);
+    const mem = toPercent(m.memoryUsage ?? null);
+    const label = [cpu != null && `CPU ${cpu}%`, mem != null && `MEM ${mem}%`]
+      .filter(Boolean)
+      .join(" / ");
 
     return (
-      <Badge
-        variant="outline"
-        className="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-600 border-blue-500/20"
-      >
-        {label}
+      <Badge className="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">
+        {label || "메트릭 없음"}
       </Badge>
     );
   };
 
-  // 🔎 검색 + 정렬된 VM 리스트
-  const filteredSortedVms = useMemo(() => {
+  /* -----------------------------
+   * 검색 + 정렬
+   * ----------------------------- */
+  const filtered = useMemo(() => {
     let data = [...vms];
 
-    if (searchText.trim().length > 0) {
-      const q = searchText.trim().toLowerCase();
+    if (searchText) {
+      const q = searchText.toLowerCase();
       data = data.filter((vm) => vm.name.toLowerCase().includes(q));
     }
 
     data.sort((a, b) => {
-      let av = a[sortKey];
-      let bv = b[sortKey];
-
+      const av = a[sortKey];
+      const bv = b[sortKey];
       if (typeof av === "string" && typeof bv === "string") {
         const res = av.localeCompare(bv);
         return sortAsc ? res : -res;
@@ -187,13 +174,13 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
     return data;
   }, [vms, searchText, sortKey, sortAsc]);
 
-  // 로딩/에러/빈 데이터 처리
+  /* -----------------------------
+   * UI 렌더링
+   * ----------------------------- */
   if (loading) {
     return (
       <Card className="p-4">
-        <p className="text-sm text-muted-foreground">
-          vCenter VM 목록을 불러오는 중입니다...
-        </p>
+        <p className="text-sm text-muted-foreground">VM 목록 로딩 중...</p>
       </Card>
     );
   }
@@ -206,31 +193,14 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
     );
   }
 
-  if (!vms.length) {
-    return (
-      <Card className="p-4">
-        <p className="text-sm text-muted-foreground">
-          표시할 VM 데이터가 없습니다.
-        </p>
-      </Card>
-    );
-  }
-
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-semibold">vCenter VM 목록</h3>
-          <p className="text-xs text-muted-foreground">
-            CloudPilot 백엔드 /monitor/vcenter/vms + /monitor/vcenter/metrics
-            연동
-          </p>
-        </div>
+        <h3 className="text-lg font-semibold">vCenter VM 목록 (실시간)</h3>
 
-        {/* 🔍 검색 + 정렬 컨트롤 영역 */}
         <div className="flex items-center gap-2">
           <Input
-            placeholder="VM 이름 검색"
+            placeholder="VM 검색"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             className="h-8 w-40 text-xs"
@@ -239,26 +209,9 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            onClick={() => setSortAsc((prev) => !prev)}
-            title={`정렬 기준: ${sortKey === "name" ? "이름" : "상태"}`}
+            onClick={() => setSortAsc((p) => !p)}
           >
             <ArrowDownUp className="h-3 w-3" />
-          </Button>
-          <Button
-            variant={sortKey === "name" ? "default" : "outline"}
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setSortKey("name")}
-          >
-            이름
-          </Button>
-          <Button
-            variant={sortKey === "powerState" ? "default" : "outline"}
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setSortKey("powerState")}
-          >
-            상태
           </Button>
         </div>
       </div>
@@ -266,26 +219,32 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>VM ID</TableHead>
-            <TableHead>이름</TableHead>
-            <TableHead>상태</TableHead>
+            <TableHead>VM 이름</TableHead>
+            <TableHead>클러스터</TableHead>
+            <TableHead>팀</TableHead>
             <TableHead>vCPU</TableHead>
-            <TableHead>메모리</TableHead>
+            <TableHead>Memory(GB)</TableHead>
+            <TableHead>Disk(GB)</TableHead>
+            <TableHead>상태</TableHead>
             <TableHead>메트릭</TableHead>
           </TableRow>
         </TableHeader>
+
         <TableBody>
-          {filteredSortedVms.map((vm, idx) => (
+          {filtered.map((vm, index) => (
             <TableRow
-              key={vm.vmId ?? `${vm.name}-${idx}`}
-              className={onVmClick ? "cursor-pointer hover:bg-muted/50" : ""}
+              key={vm.vmId ?? `${vm.name}-${index}`}
               onClick={() => onVmClick?.(vm)}
+              className={onVmClick ? "cursor-pointer hover:bg-muted/50" : ""}
             >
-              <TableCell className="font-mono text-xs">{vm.vmId}</TableCell>
               <TableCell>{vm.name}</TableCell>
+              <TableCell>{vm.clusterName ?? "-"}</TableCell>
+              <TableCell>{vm.teamName ?? "-"}</TableCell>
+              <TableCell>{vm.cpuCores ?? "-"}</TableCell>
+              <TableCell>{formatMemoryGiB(vm.memoryGb)}</TableCell>
+              <TableCell>{formatDiskGiB(vm.diskGb)}</TableCell>
               <TableCell>
                 <Badge
-                  variant="outline"
                   className={`px-2 py-0.5 text-xs ${getPowerStateBadgeClass(
                     vm.powerState
                   )}`}
@@ -293,8 +252,6 @@ export function VCenterVmTable({ teamId, onVmClick }: VCenterVmTableProps) {
                   {vm.powerState}
                 </Badge>
               </TableCell>
-              <TableCell>{vm.cpuCount}</TableCell>
-              <TableCell>{formatMemoryGiB(vm.memorySizeMiB)}</TableCell>
               <TableCell>{renderMetricBadge(vm)}</TableCell>
             </TableRow>
           ))}

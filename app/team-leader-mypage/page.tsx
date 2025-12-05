@@ -16,11 +16,12 @@ import {
   CheckCircle,
   ChevronDown,
   Package,
+  AlertTriangle,
   Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/base-client"
-import type { ApiResponse, MyPageVm } from "@/types/mypage"
+import type { ApiResponse, MyPageVm, VmAssignedMember } from "@/types/mypage"
 import type { TeamLeaderMyPageData } from "@/types/mypage-leader"
 
 import {
@@ -40,10 +41,6 @@ export default function TeamLeaderMyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // 🔹 Grafana 상세 모달용 상태
-  const [selectedVm, setSelectedVm] = useState<MyPageVm | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
-
   // 🔹 삭제 모달용 상태
   const [deleteTargetVm, setDeleteTargetVm] = useState<MyPageVm | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState("")
@@ -52,21 +49,28 @@ export default function TeamLeaderMyPage() {
   const { toast } = useToast()
 
   const toggleServerDetails = (serverId: number) => {
-    const newExpanded = new Set(expandedServers)
-    if (newExpanded.has(serverId)) newExpanded.delete(serverId)
-    else newExpanded.add(serverId)
-    setExpandedServers(newExpanded)
+    const next = new Set(expandedServers)
+    if (next.has(serverId)) next.delete(serverId)
+    else next.add(serverId)
+    setExpandedServers(next)
   }
 
   useEffect(() => {
     const fetchLeaderMyPage = async () => {
       try {
         setLoading(true)
-        const res = await apiClient.get<ApiResponse<TeamLeaderMyPageData>>("/mypage/leader")
+        setError(null)
+
+        const res = await apiClient.get<ApiResponse<TeamLeaderMyPageData>>(
+          "/mypage/leader",
+        )
         console.log("[TeamLeaderMyPage] /mypage/leader 응답:", res.data)
         setData(res.data.data)
       } catch (err: any) {
-        console.error("[TeamLeaderMyPage] /mypage/leader 오류:", err?.response ?? err)
+        console.error(
+          "[TeamLeaderMyPage] /mypage/leader 오류:",
+          err?.response ?? err,
+        )
         setError("마이페이지 정보를 불러오지 못했습니다.")
       } finally {
         setLoading(false)
@@ -76,13 +80,17 @@ export default function TeamLeaderMyPage() {
     fetchLeaderMyPage()
   }, [])
 
+  // 상태 아이콘 / 텍스트 - 대문자 통일 처리
   const getStatusIcon = (status: MyPageVm["status"]) => {
-    switch (status) {
-      case "running":
+    const upper = (status ?? "").toString().toUpperCase()
+    switch (upper) {
+      case "RUNNING":
+      case "ON":
         return <CheckCircle2 className="h-5 w-5 text-green-500" />
-      case "stopped":
+      case "STOPPED":
+      case "OFF":
         return <AlertCircle className="h-5 w-5 text-gray-400" />
-      case "pending":
+      case "PENDING":
         return <Clock className="h-5 w-5 text-yellow-500" />
       default:
         return null
@@ -90,12 +98,15 @@ export default function TeamLeaderMyPage() {
   }
 
   const getStatusText = (status: MyPageVm["status"]) => {
-    switch (status) {
-      case "running":
+    const upper = (status ?? "").toString().toUpperCase()
+    switch (upper) {
+      case "RUNNING":
+      case "ON":
         return "실행 중"
-      case "stopped":
+      case "STOPPED":
+      case "OFF":
         return "중지됨"
-      case "pending":
+      case "PENDING":
         return "대기 중"
       default:
         return status
@@ -103,21 +114,28 @@ export default function TeamLeaderMyPage() {
   }
 
   const formatDateTime = (iso: string | null | undefined) =>
-      iso ? new Date(iso).toLocaleString("ko-KR") : "-"
+    iso ? new Date(iso).toLocaleString("ko-KR") : "-"
 
-  const openGrafanaForVm = (vmName: string) => {
-    const base =
-        process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000"
-    const uid =
-        process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail"
-    const slug =
-        process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail"
+  /** VM에 연결된 할당 팀원 목록(팀장/팀원만) */
+  const getAssignedMembersForVm = (vm: MyPageVm): VmAssignedMember[] => {
+    const raw = vm.assignedMembers
+    if (!raw) return []
+    return raw.filter((m) => {
+      const code = (m.roleCode ?? "").toUpperCase()
+      return code === "LEADER" || code === "MEMBER"
+    })
+  }
 
-    const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
-        vmName,
-    )}`
+  /** 이 VM이 "이미 팀원에게 할당된 상태"인지 여부 */
+  const isVmAssigned = (vm: MyPageVm): boolean => {
+    const raw = vm.assignedMembers
 
-    window.open(url, "_blank", "noopener,noreferrer")
+    // 백엔드가 아직 assignedMembers를 내려주지 않는 기존 구조라면
+    // 기존 화면 깨지지 않도록 "할당됨"으로 취급
+    if (raw === undefined) return true
+
+    const filtered = getAssignedMembersForVm(vm)
+    return filtered.length > 0
   }
 
   // 🔹 삭제 다이얼로그 열기
@@ -141,7 +159,6 @@ export default function TeamLeaderMyPage() {
     try {
       setIsDeleting(true)
 
-      // 실제 삭제 API 호출
       await apiClient.delete(`/vms/${deleteTargetVm.id}`)
 
       // 프론트 상태에서도 제거
@@ -174,31 +191,35 @@ export default function TeamLeaderMyPage() {
   }
 
   const isConfirmMatched =
-      deleteTargetVm && deleteConfirmName.trim() === deleteTargetVm.name
+    deleteTargetVm && deleteConfirmName.trim() === deleteTargetVm.name
 
   // 🔄 로딩 상태
   if (loading) {
     return (
-        <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
-          <Header />
-          <main className="flex-1 flex items-center justify-center">
-            <p className="text-muted-foreground">🔄 마이페이지 정보를 불러오는 중입니다...</p>
-          </main>
-          <Footer />
-        </div>
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+        <Header />
+        <main className="flex flex-1 items-center justify-center">
+          <p className="text-muted-foreground">
+            🔄 마이페이지 정보를 불러오는 중입니다...
+          </p>
+        </main>
+        <Footer />
+      </div>
     )
   }
 
   // ❌ 에러 또는 데이터 없음
   if (error || !data) {
     return (
-        <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
-          <Header />
-          <main className="flex-1 flex items-center justify-center">
-            <p className="text-destructive">{error ?? "마이페이지 정보를 불러오지 못했습니다."}</p>
-          </main>
-          <Footer />
-        </div>
+      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+        <Header />
+        <main className="flex flex-1 items-center justify-center">
+          <p className="text-destructive">
+            {error ?? "마이페이지 정보를 불러오지 못했습니다."}
+          </p>
+        </main>
+        <Footer />
+      </div>
     )
   }
 
@@ -212,306 +233,419 @@ export default function TeamLeaderMyPage() {
 
   const teamMembers = data.members
 
-  const totalServers = teamMembers.reduce((acc, member) => acc + member.servers.length, 0)
-  const runningServers = teamMembers.reduce(
-      (acc, member) => acc + member.servers.filter((s) => s.status === "running").length,
-      0,
+  const totalServers = teamMembers.reduce(
+    (acc, member) => acc + member.servers.length,
+    0,
   )
 
+  const runningServers = teamMembers.reduce(
+    (acc, member) =>
+      acc +
+      member.servers.filter(
+        (s) => (s.status ?? "").toString().toUpperCase() === "RUNNING",
+      ).length,
+    0,
+  )
+
+  // 🔻 팀원이 할당되지 않은 VM 수집 + 기존 리스트에서 분리
+  const unassignedVms: MyPageVm[] = []
+  const membersForList = teamMembers
+    .map((member) => {
+      const assignedServers = member.servers.filter((vm) => {
+        const assigned = isVmAssigned(vm)
+        if (!assigned) {
+          unassignedVms.push(vm)
+        }
+        return assigned
+      })
+      return { ...member, servers: assignedServers }
+    })
+    .filter((member) => member.servers.length > 0)
+
   return (
-      <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
-        <Header />
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
+      <Header />
 
-        <main className="flex-1">
-          <div className="container px-4 py-8 md:px-6">
-            {/* 상단 요약부 */}
-            <div className="mb-6 grid gap-6 lg:grid-cols-4">
-              <Card className="p-6">
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  팀장 정보
-                </h2>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">이름</p>
-                    <p className="font-medium">{teamLeaderInfo.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">사번</p>
-                    <p className="font-medium">{teamLeaderInfo.employeeId}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">부서 / 팀</p>
-                    <p className="font-medium">
-                      {teamLeaderInfo.department} / {teamLeaderInfo.team}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">역할</p>
-                    <Badge variant="secondary">{teamLeaderInfo.role}</Badge>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <p className="text-sm text-muted-foreground mb-1">팀 전체 서버 수</p>
-                <p className="text-2xl font-bold">{totalServers}</p>
-              </Card>
-
-              <Card className="p-6">
-                <p className="text-sm text-muted-foreground mb-1">실행 중 서버</p>
-                <p className="text-2xl font-bold">{runningServers}</p>
-              </Card>
-
-              <Card className="p-6 flex flex-col justify-between">
-                <p className="text-sm text-muted-foreground mb-2">
-                  패키지 승인 관리
-                </p>
-                <Link href="/leader-approval">
-                  <Button className="w-full gap-2">
-                    <CheckCircle className="h-5 w-5" />
-                    팀 패키지 승인 페이지
-                  </Button>
-                </Link>
-              </Card>
+      <main className="flex-1">
+        <div className="container px-4 py-8 md:px-6">
+          {/* 상단 타이틀 + 요약 카드들 */}
+          <div className="mb-6">
+            <div className="mb-2 flex items-center gap-3">
+              <div className="rounded-xl bg-primary/10 p-3">
+                <Users className="h-8 w-8 text-primary" />
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                팀장 마이페이지
+              </h1>
             </div>
+            <p className="text-muted-foreground">
+              내 팀의 가상머신 상태를 한눈에 보고, 팀 패키지 승인을 관리하세요.
+            </p>
+          </div>
 
-            {/* 아래 VM 리스트 부분 */}
-            <div className="space-y-6">
-              {teamMembers.map((member, memberIndex) => (
-                  <Card key={memberIndex} className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" />
-                        {member.teamMember}
-                      </h2>
-                      <Badge variant="outline">{member.servers.length}개 서버</Badge>
+          <div className="mb-6 grid gap-6 lg:grid-cols-4">
+            <Card className="p-6">
+              <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+                <Users className="h-5 w-5 text-primary" />
+                팀장 정보
+              </h2>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <p className="text-muted-foreground">이름</p>
+                  <p className="font-medium">{teamLeaderInfo.name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">사번</p>
+                  <p className="font-medium">{teamLeaderInfo.employeeId}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">부서 / 팀</p>
+                  <p className="font-medium">
+                    {teamLeaderInfo.department} / {teamLeaderInfo.team}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">역할</p>
+                  <Badge variant="secondary">{teamLeaderInfo.role}</Badge>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <p className="mb-1 text-sm text-muted-foreground">
+                팀 전체 서버 수
+              </p>
+              <p className="text-2xl font-bold">{totalServers}</p>
+            </Card>
+
+            <Card className="p-6">
+              <p className="mb-1 text-sm text-muted-foreground">
+                실행 중 서버
+              </p>
+              <p className="text-2xl font-bold">{runningServers}</p>
+            </Card>
+
+            {/* 네 번째 칸은 추후 다른 요약 카드용으로 비워둠 */}
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground">
+                추가 지표가 여기에 들어갈 수 있습니다.
+              </p>
+            </Card>
+          </div>
+
+          {/* ✅ 패키지 승인 관리 버튼 (상단 버전 유지) */}
+          <div className="mb-6">
+            <Link href="/leader-approval">
+              <Button
+                size="lg"
+                className="w-full gap-2 bg-green-600 hover:bg-green-700 md:w-auto"
+              >
+                <CheckCircle className="h-5 w-5" />
+                팀 패키지 승인 페이지
+              </Button>
+            </Link>
+          </div>
+
+          {/* 🟥 팀원이 할당되지 않은 VM들 */}
+          {unassignedVms.length > 0 && (
+            <Card className="mb-6 border-destructive bg-destructive/5">
+              <div className="mb-3 flex items-start gap-3">
+                <div className="mt-1 rounded-full bg-destructive/10 p-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-destructive">
+                    팀원이 할당되지 않은 VM입니다.
+                  </h2>
+                  <p className="text-xs text-destructive/80">
+                    아래 VM은 반드시 팀장 또는 팀원에게 할당해주세요.
+                  </p>
+                </div>
+              </div>
+
+              <div className="divide-y">
+                {unassignedVms.map((vm) => (
+                  <div
+                    key={vm.id}
+                    className="flex flex-col gap-2 py-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-destructive" />
+                        <span className="font-semibold">{vm.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {vm.type}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        CPU: {vm.cpu ?? "-"} vCPU · 메모리: {vm.memory ?? "-"} GB ·
+                        스토리지: {vm.storage ?? "-"} GB
+                      </p>
                     </div>
 
-                    <div className="space-y-4">
-                      {member.servers.map((vm) => (
-                          <div key={vm.id} className="rounded-lg border border-border overflow-hidden">
-                            {/* 상단 요약 */}
-                            <div
-                                className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                                onClick={() => toggleServerDetails(vm.id)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-start gap-3 flex-1">
-                                  <div className="rounded-md bg-primary/10 p-2">
-                                    <Server className="h-5 w-5 text-primary" />
-                                  </div>
-                                  <div className="flex-1 space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <h3 className="font-semibold">{vm.name}</h3>
-                                      <span className="text-xs px-2 py-1 rounded-full bg-muted">{vm.type}</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                      <div>CPU: {vm.cpu ?? "-"} vCPU</div>
-                                      <div>메모리: {vm.memory ?? "-"} GB</div>
-                                      <div>스토리지: {vm.storage ?? "-"} GB</div>
-                                      <div>OS: {vm.os || "-"}</div>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      생성일: {formatDateTime(vm.createdAt)}
-                                    </p>
-                                  </div>
-                                </div>
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(vm.status)}
+                      <span className="text-sm font-medium">
+                        {getStatusText(vm.status)}
+                      </span>
+                      <Link href={`/assign-member?vmId=${vm.id}`}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-destructive text-destructive hover:bg-destructive/10"
+                        >
+                          팀원 할당하기
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* 팀원별 VM 리스트 */}
+          <div className="space-y-6">
+            {membersForList.map((member, memberIndex) => (
+              <Card key={memberIndex} className="p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="flex items-center gap-2 text-lg font-semibold">
+                    <Users className="h-5 w-5 text-primary" />
+                    {member.teamMember}
+                  </h2>
+                  <Badge variant="outline">
+                    {member.servers.length}개 서버
+                  </Badge>
+                </div>
+
+                <div className="space-y-4">
+                  {member.servers.map((vm) => {
+                    const assignedMembers = getAssignedMembersForVm(vm)
+                    return (
+                      <div
+                        key={vm.id}
+                        className="overflow-hidden rounded-lg border border-border"
+                      >
+                        {/* 상단 요약 */}
+                        <div
+                          className="cursor-pointer p-4 transition-colors hover:bg-muted/50"
+                          onClick={() => toggleServerDetails(vm.id)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex flex-1 items-start gap-3">
+                              <div className="rounded-md bg-primary/10 p-2">
+                                <Server className="h-5 w-5 text-primary" />
+                              </div>
+                              <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
-                                  {getStatusIcon(vm.status)}
-                                  <span className="text-sm font-medium">{getStatusText(vm.status)}</span>
-                                  <ChevronDown
-                                      className={`h-4 w-4 transition-transform ${
-                                          expandedServers.has(vm.id) ? "rotate-180" : ""
-                                      }`}
-                                  />
+                                  <h3 className="font-semibold">{vm.name}</h3>
+                                  <span className="rounded-full bg-muted px-2 py-1 text-xs">
+                                    {vm.type}
+                                  </span>
                                 </div>
+                                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                  <div>CPU: {vm.cpu ?? "-"} vCPU</div>
+                                  <div>메모리: {vm.memory ?? "-"} GB</div>
+                                  <div>스토리지: {vm.storage ?? "-"} GB</div>
+                                  <div>OS: {vm.os || "-"}</div>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  생성일: {formatDateTime(vm.createdAt)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  담당자:{" "}
+                                  {assignedMembers.length > 0
+                                    ? assignedMembers
+                                        .map(
+                                          (m) =>
+                                            m.name ??
+                                            m.username ??
+                                            "이름 없음",
+                                        )
+                                        .join(", ")
+                                    : "할당된 팀원이 없습니다."}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(vm.status)}
+                              <span className="text-sm font-medium">
+                                {getStatusText(vm.status)}
+                              </span>
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ${
+                                  expandedServers.has(vm.id)
+                                    ? "rotate-180"
+                                    : ""
+                                }`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 펼친 상세 영역 */}
+                        {expandedServers.has(vm.id) && (
+                          <div className="border-t bg-muted/30 px-4 pb-4 pt-2">
+                            <div className="mb-3 flex items-center justify-between">
+                              <h5 className="flex items-center gap-2 font-semibold">
+                                <Package className="h-4 w-4" />
+                                상세 정보
+                              </h5>
+
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="flex items-center gap-1"
+                                  onClick={() => openDeleteDialog(vm)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  VM 삭제
+                                </Button>
                               </div>
                             </div>
 
-                            {/* 상세 영역 */}
-                            {expandedServers.has(vm.id) && (
-                                <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <h5 className="font-semibold flex items-center gap-2">
-                                      <Package className="h-4 w-4" />
-                                      상세 정보
-                                    </h5>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="mb-1 text-muted-foreground">
+                                  IP 주소
+                                </p>
+                                <p className="font-medium">
+                                  {vm.ipAddress || "-"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="mb-1 text-muted-foreground">
+                                  마지막 업데이트
+                                </p>
+                                <p className="font-medium">
+                                  {formatDateTime(vm.lastUpdated)}
+                                </p>
+                              </div>
 
-                                    <div className="flex items-center gap-2">
-                                      <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            setSelectedVm(vm)
-                                            setDetailOpen(true)
-                                          }}
+                              {/* 할당된 팀원 정보 */}
+                              <div className="col-span-2">
+                                <p className="mb-2 text-muted-foreground">
+                                  할당된 팀원
+                                </p>
+                                {assignedMembers.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {assignedMembers.map((m, idx) => (
+                                      <Badge
+                                        key={idx}
+                                        variant="secondary"
+                                        className="text-xs"
                                       >
-                                        Grafana 상세 모니터링
-                                      </Button>
+                                        {m.name ??
+                                          m.username ??
+                                          "이름 없음"}
+                                        {m.employeeId
+                                          ? ` (${m.employeeId})`
+                                          : ""}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    할당된 팀원이 없습니다.
+                                  </span>
+                                )}
+                              </div>
 
-                                      <Button
-                                          size="sm"
-                                          variant="destructive"
-                                          className="flex items-center gap-1"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            openDeleteDialog(vm)
-                                          }}
+                              <div className="col-span-2">
+                                <p className="mb-2 text-muted-foreground">
+                                  설치된 패키지
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {vm.packages && vm.packages.length > 0 ? (
+                                    vm.packages.map((pkg, idx) => (
+                                      <Badge
+                                        key={idx}
+                                        variant="secondary"
+                                        className="text-xs"
                                       >
-                                        <Trash2 className="h-4 w-4" />
-                                        VM 삭제
-                                      </Button>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                      <p className="text-muted-foreground mb-1">IP 주소</p>
-                                      <p className="font-medium">{vm.ipAddress}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground mb-1">마지막 업데이트</p>
-                                      <p className="font-medium">{formatDateTime(vm.lastUpdated)}</p>
-                                    </div>
-                                    <div className="col-span-2">
-                                      <p className="text-muted-foreground mb-2">설치된 패키지</p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {vm.packages.map((pkg, idx) => (
-                                            <Badge key={idx} variant="secondary" className="text-xs">
-                                              {pkg}
-                                            </Badge>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  </div>
+                                        {pkg}
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">
+                                      등록된 패키지가 없습니다.
+                                    </span>
+                                  )}
                                 </div>
-                            )}
+                              </div>
+                            </div>
                           </div>
-                      ))}
-                    </div>
-                  </Card>
-              ))}
-            </div>
-          </div>
-        </main>
-
-        {/* 🔹 Grafana 상세 모달 */}
-        <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedVm ? `${selectedVm.name} 상세 모니터링` : "VM 상세"}
-              </DialogTitle>
-              <DialogDescription>
-                VM 스펙과 네트워크 정보를 확인하고 Grafana 대시보드로 이동할 수 있습니다.
-              </DialogDescription>
-            </DialogHeader>
-
-            {selectedVm && (
-                <div className="space-y-4 text-sm">
-                  <Card className="p-4 space-y-1">
-                    <p>
-                      <span className="font-medium">이름: </span>
-                      {selectedVm.name}
-                    </p>
-                    <p>
-                      <span className="font-medium">타입: </span>
-                      {selectedVm.type}
-                    </p>
-                    <p>
-                      <span className="font-medium">CPU: </span>
-                      {selectedVm.cpu ?? "-"} vCPU
-                    </p>
-                    <p>
-                      <span className="font-medium">메모리: </span>
-                      {selectedVm.memory ?? "-"} GB
-                    </p>
-                    <p>
-                      <span className="font-medium">스토리지: </span>
-                      {selectedVm.storage ?? "-"} GB
-                    </p>
-                    <p>
-                      <span className="font-medium">OS: </span>
-                      {selectedVm.os || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium">IP: </span>
-                      {selectedVm.ipAddress || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium">생성일: </span>
-                      {formatDateTime(selectedVm.createdAt)}
-                    </p>
-                  </Card>
-
-                  <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openGrafanaForVm(selectedVm.name)}
-                  >
-                    Grafana 상세 대시보드 열기
-                  </Button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-            )}
-          </DialogContent>
-        </Dialog>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </main>
 
-        {/* 🔹 VM 삭제 확인 모달 */}
-        <Dialog
-            open={!!deleteTargetVm}
-            onOpenChange={(open) => {
-              if (!open) closeDeleteDialog()
-            }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>VM 삭제</DialogTitle>
-              <DialogDescription>
-                {deleteTargetVm ? (
-                    <>
+      {/* 🔹 VM 삭제 확인 모달 */}
+      <Dialog
+        open={!!deleteTargetVm}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog()
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>VM 삭제</DialogTitle>
+            <DialogDescription>
+              {deleteTargetVm ? (
+                <>
                   <span className="font-semibold text-foreground">
                     {deleteTargetVm.name}
                   </span>{" "}
-                      VM을 정말로 삭제하시겠어요?
-                      <br />
-                      이 작업은 되돌릴 수 없습니다. 계속하려면 아래 입력란에 정확히{" "}
-                      <span className="font-mono text-foreground">
+                  VM을 정말로 삭제하시겠어요?
+                  <br />
+                  이 작업은 되돌릴 수 없습니다. 계속하려면 아래 입력란에 정확히{" "}
+                  <span className="font-mono text-foreground">
                     {deleteTargetVm.name}
                   </span>{" "}
-                      를 입력하세요.
-                    </>
-                ) : (
-                    "VM을 삭제하시겠습니까?"
-                )}
-              </DialogDescription>
-            </DialogHeader>
+                  를 입력하세요.
+                </>
+              ) : (
+                "VM을 삭제하시겠습니까?"
+              )}
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">VM 이름 확인</p>
-              <Input
-                  placeholder={deleteTargetVm?.name ?? ""}
-                  value={deleteConfirmName}
-                  onChange={(e) => setDeleteConfirmName(e.target.value)}
-              />
-            </div>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">VM 이름 확인</p>
+            <Input
+              placeholder={deleteTargetVm?.name ?? ""}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+            />
+          </div>
 
-            <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={closeDeleteDialog} disabled={isDeleting}>
-                취소
-              </Button>
-              <Button
-                  variant="destructive"
-                  onClick={handleDeleteVm}
-                  disabled={!isConfirmMatched || isDeleting}
-              >
-                {isDeleting ? "삭제 중..." : "삭제하기"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={isDeleting}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteVm}
+              disabled={!isConfirmMatched || isDeleting}
+            >
+              {isDeleting ? "삭제 중..." : "삭제하기"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <Footer />
-      </div>
+      <Footer />
+    </div>
   )
 }
