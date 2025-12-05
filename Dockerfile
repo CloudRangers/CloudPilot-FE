@@ -17,18 +17,14 @@ FROM node:20-bullseye AS runner
 
 WORKDIR /app
 
-# package.json 복사
-COPY package*.json ./
-
-# 런타임용 node_modules 복사
+COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
-
-# 빌드 결과물 복사
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
+RUN npm install -g pm2
+
 EXPOSE 3000
 
-RUN npm install -g pm2
 CMD ["pm2-runtime", "npm", "--", "start"]
 
