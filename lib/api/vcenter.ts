@@ -1,6 +1,7 @@
 // src/lib/api/vcenter.ts
 import { apiClient } from "./base-client";
 
+/* 공통 API 응답 래퍼 */
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -18,7 +19,7 @@ export interface VCenterSummary {
 
 /* vCenter + DB 공용 VM DTO */
 export interface LiveVcenterVm {
-  vmId?: string | null;   // 지금은 안 쓰더라도 남겨둠
+  vmId?: string | null; // vCenter "vm-123" 같은 ID (지금은 안 써도 OK)
 
   name: string;
   powerState: string;
@@ -32,7 +33,7 @@ export interface LiveVcenterVm {
   teamId?: number | null;
   teamName?: string | null;
   clusterName?: string | null;
-  //createdAt?: string | null;
+  // createdAt?: string | null;
 }
 
 export const vcenterApi = {
@@ -43,7 +44,7 @@ export const vcenterApi = {
     return res.data;
   },
 
-  /** ✅ 우리 팀 기준 vCenter VM (실시간 + DB매핑) */
+  /** ✅ 우리 팀 기준 vCenter VM (실시간 + DB 매핑) */
   async getTeamVms(teamId?: number) {
     const res = await apiClient.get<ApiResponse<LiveVcenterVm[]>>(
       "/monitor/vcenter/vms",
@@ -56,12 +57,15 @@ export const vcenterApi = {
     return res.data;
   },
 
-  /** 원하면 남겨두는 실시간 raw */
-  export const vcenterApi = {
+  /** 원하면 전체 실시간 raw */
   async getLiveVms(teamId?: number) {
     const res = await apiClient.get<ApiResponse<LiveVcenterVm[]>>(
       "/monitor/vcenter/live-vms",
-      teamId != null ? { params: { teamId } } : undefined
+      teamId != null
+        ? {
+            params: { teamId },
+          }
+        : undefined
     );
     return res.data;
   },

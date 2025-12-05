@@ -1,4 +1,3 @@
-// src/components/vcenter-vm-table.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -20,7 +19,7 @@ import { vcenterApi, LiveVcenterVm } from "@/lib/api/vcenter";
 import { prometheusApi, VmMetricSummary } from "@/lib/api/prometheus";
 
 /* -----------------------------
- * 메모리 GB 표기
+ * 메모리 / 디스크 GB 표기
  * ----------------------------- */
 function formatMemoryGiB(gb: number | null | undefined): string {
   if (gb == null) return "-";
@@ -70,52 +69,7 @@ export function VCenterVmTable({ onVmClick }: Props) {
 
   /* -----------------------------
    * vCenter 실시간 목록 + Prometheus 메트릭 동시 조회
-   * ----------------------------- */
-  // src/components/vcenter-vm-table.tsx (useEffect 부분만 변경)
-// useEffect(() => {
-//   const load = async () => {
-//     try {
-//       setLoading(true);
-//       setError(null);
-
-//       const teamIdStr =
-//         typeof window !== "undefined"
-//           ? window.localStorage.getItem("teamId")
-//           : null;
-//       const teamId = teamIdStr ? Number(teamIdStr) : undefined;
-
-//       const [vmRes, metricRes] = await Promise.all([
-//         vcenterApi.getTeamVms(teamId),        // ✅ 우리 팀 vCenter VM
-//         prometheusApi.getVmMetrics(teamId),   // ✅ 메트릭도 teamId 전달
-//       ]);
-
-//       if (!vmRes.success || !vmRes.data) {
-//         setError(vmRes.message ?? "vCenter VM 목록 조회 실패");
-//         setVms([]);
-//         return;
-//       }
-
-//       setVms(vmRes.data);
-
-//       if (metricRes.success && metricRes.data) {
-//         setMetrics(metricRes.data);
-//       } else {
-//         setMetrics(null);
-//       }
-//     } catch (err) {
-//       console.error("[VM Table] load error:", err);
-//       setError("vCenter VM/메트릭 조회 중 오류 발생");
-//       setVms([]);
-//       setMetrics(null);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   load();
-// }, []);
-   /* -----------------------------
-   * vCenter 실시간 목록 + Prometheus 메트릭 동시 조회
+   *  → 우리 팀 기준으로 필터링
    * ----------------------------- */
   useEffect(() => {
     const load = async () => {
@@ -123,13 +77,22 @@ export function VCenterVmTable({ onVmClick }: Props) {
         setLoading(true);
         setError(null);
 
+        // ⭐ localStorage 에서 teamId 읽기
+        const teamIdStr =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("teamId")
+            : null;
+        const teamId = teamIdStr ? Number(teamIdStr) : undefined;
+
         const [vmRes, metricRes] = await Promise.all([
-          vcenterApi.getLiveVms(),
-          prometheusApi.getVmMetrics(), // 전체 VM 기준 메트릭
+          vcenterApi.getTeamVms(teamId), // ✅ 우리 팀 vCenter VM (실시간 + DB 매핑)
+          prometheusApi.getVmMetrics(teamId), // ✅ 메트릭도 같은 teamId 기준
         ]);
 
         if (!vmRes.success || !vmRes.data) {
           setError(vmRes.message ?? "vCenter VM 목록 조회 실패");
+          setVms([]);
+          setMetrics(null);
           return;
         }
 
@@ -137,10 +100,14 @@ export function VCenterVmTable({ onVmClick }: Props) {
 
         if (metricRes.success && metricRes.data) {
           setMetrics(metricRes.data);
+        } else {
+          setMetrics(null);
         }
       } catch (err) {
         console.error("[VM Table] load error:", err);
         setError("vCenter VM/메트릭 조회 중 오류 발생");
+        setVms([]);
+        setMetrics(null);
       } finally {
         setLoading(false);
       }
@@ -266,11 +233,11 @@ export function VCenterVmTable({ onVmClick }: Props) {
         <TableBody>
           {filtered.map((vm, index) => (
             <TableRow
-              key={vm.vmId ?? `${vm.name}-${index}`} // 🔹 이름 + index 로 유니크 보장
+              key={vm.vmId ?? `${vm.name}-${index}`}
               onClick={() => onVmClick?.(vm)}
               className={onVmClick ? "cursor-pointer hover:bg-muted/50" : ""}
             >
-             <TableCell>{vm.name}</TableCell>
+              <TableCell>{vm.name}</TableCell>
               <TableCell>{vm.clusterName ?? "-"}</TableCell>
               <TableCell>{vm.teamName ?? "-"}</TableCell>
               <TableCell>{vm.cpuCores ?? "-"}</TableCell>
