@@ -1,40 +1,32 @@
-# ----------------------------
 # 1) Build Stage
-# ----------------------------
-FROM node:20-alpine AS builder
+FROM node:20-bullseye AS builder
+
 WORKDIR /app
 
-# Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy source
 COPY . .
-
-# Build Next.js
 ARG NEXT_PUBLIC_API_BASE_URL
-ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+RUN echo "Using API URL: $NEXT_PUBLIC_API_BASE_URL"
 RUN npm run build
 
+# 2) Run Stage
+FROM node:20-bullseye AS runner
 
-# ----------------------------
-# 2) Production Runtime Stage
-# ----------------------------
-FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Copy package.json to runtime
+# package.json 복사
 COPY package*.json ./
 
-# Copy node_modules from build stage (필수!)
+# 런타임용 node_modules 복사
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copy build output
+# 빌드 결과물 복사
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 
-# EXPOSE
 EXPOSE 3000
 
-# Start
 CMD ["npm", "start"]
