@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Server, AlertCircle } from "lucide-react";
+import { Server, AlertCircle, Loader2 } from "lucide-react";
 
 /** ===== 타입 정의 ===== */
 
@@ -64,6 +64,14 @@ interface OSImage {
   imageId?: string;
 }
 
+/** 팀 타입 정의 */
+interface Team {
+  id: number;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
 interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -102,11 +110,10 @@ function CreateVMPageInner() {
   const [isLoadingOS, setIsLoadingOS] = useState(false);
   const [osLoadError, setOsLoadError] = useState<string | null>(null);
 
-  const teams = [
-    { id: "1", name: "DEVELOPMENT" },
-    { id: "2", name: "OPS" },
-    { id: "3", name: "QA" },
-  ];
+  /** 팀 목록 상태 (DB 연동) */
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  const [teamsLoadError, setTeamsLoadError] = useState<string | null>(null);
 
   // 로그인 정보에서 팀/역할 가져오기
   useEffect(() => {
@@ -120,6 +127,30 @@ function CreateVMPageInner() {
     }
   }, []);
 
+  /** 팀 목록 로딩 (DB에서 조회) */
+  useEffect(() => {
+    const fetchTeams = async () => {
+      setIsLoadingTeams(true);
+      setTeamsLoadError(null);
+      try {
+        const response = await apiClient.get<ApiResponse<Team[]>>("/api/teams");
+
+        const teamList = response.data?.data ?? [];
+        console.log("[CreateVM] 팀 목록 응답:", teamList);
+        setTeams(teamList);
+      } catch (err: any) {
+        console.error("[CreateVM] 팀 목록 조회 실패:", err?.message, err);
+        setTeamsLoadError(
+            "팀 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."
+        );
+      } finally {
+        setIsLoadingTeams(false);
+      }
+    };
+
+    fetchTeams();
+  }, []);
+
   /** OS 목록 로딩 */
   useEffect(() => {
     const fetchOsImages = async () => {
@@ -127,7 +158,7 @@ function CreateVMPageInner() {
       setOsLoadError(null);
       try {
         const response = await apiClient.get<
-          ApiResponse<PageResponse<OSImage>>
+            ApiResponse<PageResponse<OSImage>>
         >("/catalog/os-images", {
           params: { page: 0, size: 50, zoneId: 1, sort: "name,asc" },
         });
@@ -137,12 +168,12 @@ function CreateVMPageInner() {
         setOsImages(list);
       } catch (err: any) {
         console.error(
-          "[CreateVM] OS 이미지 목록 조회 실패:",
-          err?.message,
-          err
+            "[CreateVM] OS 이미지 목록 조회 실패:",
+            err?.message,
+            err
         );
         setOsLoadError(
-          "OS 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."
+            "OS 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."
         );
       } finally {
         setIsLoadingOS(false);
@@ -184,7 +215,7 @@ function CreateVMPageInner() {
 
     if (memoryValue > 32) {
       newErrors.memory =
-        "서버 메모리가 부족합니다. 최대 32GB까지 선택 가능합니다.";
+          "서버 메모리가 부족합니다. 최대 32GB까지 선택 가능합니다.";
     }
 
     if (cpuValue > 8 && memoryValue < 16) {
@@ -193,13 +224,13 @@ function CreateVMPageInner() {
 
     if (storageValue > 500) {
       newErrors.storage =
-        "스토리지 용량이 제한을 초과했습니다. 최대 500GB까지 가능합니다.";
+          "스토리지 용량이 제한을 초과했습니다. 최대 500GB까지 가능합니다.";
     }
 
     const finalTeamId = resolveTeamId();
     if (
-      (userRole === "ADMIN" || userRole === "HEAD") &&
-      (finalTeamId == null || Number.isNaN(finalTeamId))
+        (userRole === "ADMIN" || userRole === "HEAD") &&
+        (finalTeamId == null || Number.isNaN(finalTeamId))
     ) {
       newErrors.general = "VM을 소유할 팀을 선택해주세요.";
     }
@@ -212,20 +243,20 @@ function CreateVMPageInner() {
     const osKey = selectedOsImage?.name ?? os;
 
     const templateNameFromBE =
-      TEMPLATE_NAME_MAP[osKey] ??
-      selectedOsImage?.templateName ??
-      selectedOsImage?.imageId ??
-      selectedOsImage?.name;
+        TEMPLATE_NAME_MAP[osKey] ??
+        selectedOsImage?.templateName ??
+        selectedOsImage?.imageId ??
+        selectedOsImage?.name;
 
     const additionalConfig =
-      templateNameFromBE && templateNameFromBE.length > 0
-        ? {
-            templateName: templateNameFromBE,
-            cloneType: "full" as const,
-            diskProvisioning: "thin" as const,
-            ipAllocationMode: "DHCP" as const,
-          }
-        : undefined;
+        templateNameFromBE && templateNameFromBE.length > 0
+            ? {
+              templateName: templateNameFromBE,
+              cloneType: "full" as const,
+              diskProvisioning: "thin" as const,
+              ipAllocationMode: "DHCP" as const,
+            }
+            : undefined;
 
     const payload: any = {
       zoneId: 1,
@@ -246,29 +277,29 @@ function CreateVMPageInner() {
 
     try {
       const response = await apiClient.post<ProvisionResponse>(
-        "/provision",
-        payload
+          "/provision",
+          payload
       );
 
       const provision = response.data;
 
       console.log(
-        "[CreateVM] /provision 응답:",
-        JSON.stringify(provision, null, 2)
+          "[CreateVM] /provision 응답:",
+          JSON.stringify(provision, null, 2)
       );
 
       const primaryJobId =
-        provision.firstJobId ??
-        (provision.jobIds && provision.jobIds.length > 0
-          ? provision.jobIds[0]
-          : undefined) ??
-        (typeof provision.jobId === "string"
-          ? Number.parseInt(provision.jobId, 10)
-          : provision.jobId);
+          provision.firstJobId ??
+          (provision.jobIds && provision.jobIds.length > 0
+              ? provision.jobIds[0]
+              : undefined) ??
+          (typeof provision.jobId === "string"
+              ? Number.parseInt(provision.jobId, 10)
+              : provision.jobId);
 
       /** 🔥 팀 이름 / ID 정리해서 VM 정보에 같이 저장 */
       const teamKey = selectedTeamId || authTeamId || "";
-      const teamName = teams.find((t) => t.id === teamKey)?.name ?? teamKey;
+      const teamName = teams.find((t) => String(t.id) === teamKey)?.name ?? teamKey;
 
       const newVM = {
         id: `vm-${Date.now()}`,
@@ -289,8 +320,8 @@ function CreateVMPageInner() {
       try {
         localStorage.setItem("newlyCreatedVM", JSON.stringify(newVM));
         localStorage.setItem(
-          "lastProvisionResult",
-          JSON.stringify(provision)
+            "lastProvisionResult",
+            JSON.stringify(provision)
         );
         // 기존 할당 정보는 새 생성 때 초기화
         localStorage.removeItem("vmAssignments");
@@ -302,9 +333,9 @@ function CreateVMPageInner() {
        * 🔥 creating-vm으로 이동 (jobId/jobIds 방식)
        */
       const isBatch =
-        provision.batchProvision &&
-        Array.isArray(provision.jobIds) &&
-        provision.jobIds.length > 0;
+          provision.batchProvision &&
+          Array.isArray(provision.jobIds) &&
+          provision.jobIds.length > 0;
 
       if (isBatch) {
         const jobIdsParam = provision.jobIds.join(",");
@@ -317,10 +348,10 @@ function CreateVMPageInner() {
     } catch (error: any) {
       console.error("[CreateVM] /provision 호출 중 오류:", error);
       const messageFromServer =
-        error?.response?.data?.message ??
-        (error?.response?.status === 403
-          ? "권한이 없습니다. 다시 로그인 후 시도해주세요."
-          : "서버와 통신 중 오류가 발생했습니다.");
+          error?.response?.data?.message ??
+          (error?.response?.status === 403
+              ? "권한이 없습니다. 다시 로그인 후 시도해주세요."
+              : "서버와 통신 중 오류가 발생했습니다.");
 
       setErrors({ general: messageFromServer });
     }
@@ -364,220 +395,248 @@ function CreateVMPageInner() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header />
+      <div className="flex min-h-screen flex-col">
+        <Header />
 
-      <main className="flex-1 bg-background">
-        <div className="container px-4 py-8 md:px-6">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight">가상머신 생성</h1>
-            <p className="mt-2 text-muted-foreground">
-              새로운 프라이빗 가상머신을 구성해보세요
-            </p>
-          </div>
-
-          <Card className="p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-4">팀 선택</h2>
-            <Select
-              value={selectedTeamId}
-              onValueChange={setSelectedTeamId}
-              disabled={userRole === "LEADER" || userRole === "MEMBER"}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    userRole === "LEADER" || userRole === "MEMBER"
-                      ? "내 팀으로 생성됩니다"
-                      : "팀을 선택하세요"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {teams.map((team) => (
-                  <SelectItem key={team.id} value={team.id}>
-                    {team.name} (ID: {team.id})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(userRole === "LEADER" || userRole === "MEMBER") && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                팀장/팀원은 로그인된 팀으로만 VM을 생성할 수 있습니다.
+        <main className="flex-1 bg-background">
+          <div className="container px-4 py-8 md:px-6">
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">가상머신 생성</h1>
+              <p className="mt-2 text-muted-foreground">
+                새로운 프라이빗 가상머신을 구성해보세요
               </p>
-            )}
-          </Card>
+            </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <Card className="p-6">
-                <form className="space-y-6" onSubmit={handleSubmit}>
-                  {errors.general && (
-                    <div className="flex items-start gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
-                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-                      <span className="text-sm font-medium text-destructive">
+            <Card className="p-6 mb-6">
+              <h2 className="text-lg font-semibold mb-4">팀 선택</h2>
+              <Select
+                  value={selectedTeamId}
+                  onValueChange={setSelectedTeamId}
+                  disabled={
+                      userRole === "LEADER" ||
+                      userRole === "MEMBER" ||
+                      isLoadingTeams ||
+                      !!teamsLoadError
+                  }
+              >
+                <SelectTrigger>
+                  <SelectValue
+                      placeholder={
+                        isLoadingTeams
+                            ? "팀 목록 불러오는 중..."
+                            : teamsLoadError
+                                ? "팀 목록 로딩 실패"
+                                : userRole === "LEADER" || userRole === "MEMBER"
+                                    ? "내 팀으로 생성됩니다"
+                                    : "팀을 선택하세요"
+                      }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {isLoadingTeams ? (
+                      <div className="flex items-center justify-center px-3 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span className="text-sm text-muted-foreground">
+                      로딩 중...
+                    </span>
+                      </div>
+                  ) : teams.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        등록된 팀이 없습니다.
+                      </div>
+                  ) : (
+                      teams.map((team) => (
+                          <SelectItem key={team.id} value={String(team.id)}>
+                            {team.name} (ID: {team.id})
+                          </SelectItem>
+                      ))
+                  )}
+                </SelectContent>
+              </Select>
+              {teamsLoadError && (
+                  <p className="mt-2 text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {teamsLoadError}
+                  </p>
+              )}
+              {(userRole === "LEADER" || userRole === "MEMBER") && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    팀장/팀원은 로그인된 팀으로만 VM을 생성할 수 있습니다.
+                  </p>
+              )}
+            </Card>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <Card className="p-6">
+                  <form className="space-y-6" onSubmit={handleSubmit}>
+                    {errors.general && (
+                        <div className="flex items-start gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                          <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+                          <span className="text-sm font-medium text-destructive">
                         {errors.general}
                       </span>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="vm-name" className="text-base">VM 이름</Label>
-                    <Input
-                      id="vm-name"
-                      placeholder="예: production-server-01"
-                      value={vmName}
-                      onChange={(e) => setVmName(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="vm-count" className="text-base">VM 개수</Label>
-                    <Input
-                      id="vm-count"
-                      type="number"
-                      min={1}
-                      max={10}
-                      placeholder="예: 3"
-                      value={vmCount}
-                      onChange={(e) => setVmCount(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <h3 className="font-semibold text-lg">프라이빗 VM 옵션</h3>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
-                      <Label htmlFor="private-cpu" className="text-base">CPU (vCPU)</Label>
-                      <Select value={cpu} onValueChange={setCpu}>
-                        <SelectTrigger id="private-cpu">
-                          <SelectValue placeholder="CPU 선택" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 4, 8, 16].map((v) => (
-                            <SelectItem key={v} value={String(v)}>
-                              {v} vCPU
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.cpu && (
-                        <p className="text-sm text-destructive flex items-center gap-1">
-                          <AlertCircle className="h-4 w-4" /> {errors.cpu}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="private-memory" className="text-base">메모리 (GB)</Label>
-                      <Select value={memory} onValueChange={setMemory}>
-                        <SelectTrigger id="private-memory">
-                          <SelectValue placeholder="메모리 선택" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 4, 8, 16, 32, 64].map((v) => (
-                            <SelectItem key={v} value={String(v)}>
-                              {v} GB
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.memory && (
-                        <p className="text-sm text-destructive flex items-center gap-1">
-                          <AlertCircle className="h-4 w-4" /> {errors.memory}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="private-storage" className="text-base">저장공간 (GB)</Label>
+                      <Label htmlFor="vm-name" className="text-base">VM 이름</Label>
                       <Input
-                        id="private-storage"
-                        type="number"
-                        placeholder="예: 100"
-                        value={storage}
-                        onChange={(e) => setStorage(e.target.value)}
+                          id="vm-name"
+                          placeholder="예: production-server-01"
+                          value={vmName}
+                          onChange={(e) => setVmName(e.target.value)}
                       />
-                      {errors.storage && (
-                        <p className="text-sm text-destructive flex items-center gap-1">
-                          <AlertCircle className="h-4 w-4" /> {errors.storage}
-                        </p>
-                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="private-os" className="text-base">운영체제</Label>
-                      <Select 
-                        value={os}
-                        onValueChange={(value) => setOs(value)}
-                        disabled={isLoadingOS || !!osLoadError}
+                      <Label htmlFor="vm-count" className="text-base">VM 개수</Label>
+                      <Input
+                          id="vm-count"
+                          type="number"
+                          min={1}
+                          max={10}
+                          placeholder="예: 3"
+                          value={vmCount}
+                          onChange={(e) => setVmCount(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+                      <h3 className="font-semibold text-lg">프라이빗 VM 옵션</h3>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="private-cpu" className="text-base">CPU (vCPU)</Label>
+                        <Select value={cpu} onValueChange={setCpu}>
+                          <SelectTrigger id="private-cpu">
+                            <SelectValue placeholder="CPU 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 4, 8, 16].map((v) => (
+                                <SelectItem key={v} value={String(v)}>
+                                  {v} vCPU
+                                </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.cpu && (
+                            <p className="text-sm text-destructive flex items-center gap-1">
+                              <AlertCircle className="h-4 w-4" /> {errors.cpu}
+                            </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="private-memory" className="text-base">메모리 (GB)</Label>
+                        <Select value={memory} onValueChange={setMemory}>
+                          <SelectTrigger id="private-memory">
+                            <SelectValue placeholder="메모리 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 4, 8, 16, 32, 64].map((v) => (
+                                <SelectItem key={v} value={String(v)}>
+                                  {v} GB
+                                </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.memory && (
+                            <p className="text-sm text-destructive flex items-center gap-1">
+                              <AlertCircle className="h-4 w-4" /> {errors.memory}
+                            </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="private-storage" className="text-base">저장공간 (GB)</Label>
+                        <Input
+                            id="private-storage"
+                            type="number"
+                            placeholder="예: 100"
+                            value={storage}
+                            onChange={(e) => setStorage(e.target.value)}
+                        />
+                        {errors.storage && (
+                            <p className="text-sm text-destructive flex items-center gap-1">
+                              <AlertCircle className="h-4 w-4" /> {errors.storage}
+                            </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="private-os" className="text-base">운영체제</Label>
+                        <Select
+                            value={os}
+                            onValueChange={(value) => setOs(value)}
+                            disabled={isLoadingOS || !!osLoadError}
+                        >
+                          <SelectTrigger id="private-os">
+                            <SelectValue
+                                placeholder={
+                                  isLoadingOS
+                                      ? "OS 목록 불러오는 중..."
+                                      : osLoadError
+                                          ? "OS 목록 로딩 실패"
+                                          : "OS 선택"
+                                }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {osImages.length === 0 ? (
+                                <div className="px-3 py-2 text-base text-muted-foreground">
+                                  사용 가능한 OS가 없습니다.
+                                </div>
+                            ) : (
+                                osImages.map((image, idx) => (
+                                    <SelectItem key={idx} value={image.name}>
+                                      {image.name}
+                                    </SelectItem>
+                                ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        {osLoadError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {osLoadError}
+                            </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button type="submit" size="lg" className="w-full">
+                      생성 요청
+                    </Button>
+                  </form>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-1">
+                <Card className="p-6 sticky top-20">
+                  <h3 className="font-semibold mb-4 text-lg">이전 생성 스펙</h3>
+                  {previousSpecs.map((spec, idx) => (
+                      <div
+                          key={idx}
+                          className="rounded-lg border p-4 mb-3 hover:bg-muted/50 cursor-pointer"
+                          onClick={() => applySpec(spec)}
                       >
-                        <SelectTrigger id="private-os">
-                          <SelectValue
-                            placeholder={
-                              isLoadingOS
-                                ? "OS 목록 불러오는 중..."
-                                : osLoadError
-                                ? "OS 목록 로딩 실패"
-                                : "OS 선택"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {osImages.length === 0 ? (
-                            <div className="px-3 py-2 text-base text-muted-foreground">
-                              사용 가능한 OS가 없습니다.
-                            </div>
-                          ) : (
-                            osImages.map((image, idx) => (
-                              <SelectItem key={idx} value={image.name}>
-                                {image.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {osLoadError && (
-                        <p className="text-xs text-destructive mt-1">
-                          {osLoadError}
+                        <div className="flex items-center gap-2">
+                          <Server className="h-4 w-4 text-primary" />
+                          <span className="font-medium text-lg">{spec.name}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {spec.cpu} vCPU / {spec.memory}GB / {spec.storage}GB /{" "}
+                          {spec.os}
                         </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <Button type="submit" size="lg" className="w-full">
-                    생성 요청
-                  </Button>
-                </form>
-              </Card>
-            </div>
-
-            <div className="lg:col-span-1">
-              <Card className="p-6 sticky top-20">
-                <h3 className="font-semibold mb-4 text-lg">이전 생성 스펙</h3>
-                {previousSpecs.map((spec, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-lg border p-4 mb-3 hover:bg-muted/50 cursor-pointer"
-                    onClick={() => applySpec(spec)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Server className="h-4 w-4 text-primary" />
-                      <span className="font-medium text-lg">{spec.name}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {spec.cpu} vCPU / {spec.memory}GB / {spec.storage}GB /{" "}
-                      {spec.os}
-                    </p>
-                  </div>
-                ))}
-              </Card>
+                      </div>
+                  ))}
+                </Card>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
 
-      <Footer />
-    </div>
+        <Footer />
+      </div>
   );
 }
 
@@ -586,26 +645,24 @@ function CreateVMPageInner() {
  */
 export default function CreateVMPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen flex-col">
-          <Header />
-          <main className="flex-1 bg-background">
-            <div className="container px-4 py-8 md:px-6">
-              <Card className="p-6">
-                <p className="text-sm text-muted-foreground">
-                  페이지를 불러오는 중입니다...
-                </p>
-              </Card>
+      <Suspense
+          fallback={
+            <div className="flex min-h-screen flex-col">
+              <Header />
+              <main className="flex-1 bg-background">
+                <div className="container px-4 py-8 md:px-6">
+                  <Card className="p-6">
+                    <p className="text-sm text-muted-foreground">
+                      페이지를 불러오는 중입니다...
+                    </p>
+                  </Card>
+                </div>
+              </main>
+              <Footer />
             </div>
-          </main>
-          <Footer />
-        </div>
-      }
-    >
-      <CreateVMPageInner />
-    </Suspense>
+          }
+      >
+        <CreateVMPageInner />
+      </Suspense>
   );
 }
-
-
