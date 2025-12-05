@@ -62,10 +62,13 @@ export function Header() {
     try {
       setIsLoggingOut(true);
 
-      const res = await fetch("/api/backend/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetch(
+  `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`,
+  {
+    method: "POST",
+    credentials: "include",
+  }
+);
 
       if (!res.ok) {
         console.warn("❗ 백엔드 로그아웃 요청 실패");
@@ -263,16 +266,7 @@ export function Header() {
                       <>
                         <DropdownMenuItem asChild className="text-base">
                           <Link href="/vm-status" className="flex items-center gap-2">
-                            <Server className="h-4 w-4" /> VM 생성 현황
-                          </Link>
-                        </DropdownMenuItem>
-
-                        <DropdownMenuItem asChild className="text-base">
-                          <Link
-                            href="/package-list"
-                            className="flex items-center gap-2"
-                          >
-                            <Package className="h-4 w-4" /> 패키지 현황
+                            <Server className="h-4 w-4" /> VM 대시보드
                           </Link>
                         </DropdownMenuItem>
 

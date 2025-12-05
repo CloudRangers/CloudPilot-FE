@@ -33,10 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         // 인증 실패 시 리디렉션하지 않도록 옵션 추가
         const json = await fetchWithAuth(
-          "/api/backend/auth/me",
-          {},
-          { redirectOnFail: false }
-        );
+  `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/me`,
+  {},
+  { redirectOnFail: false }
+);
 
         if (json?.success && json.data) {
           if (mounted) setUser(json.data);
