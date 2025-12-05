@@ -7,7 +7,7 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-// 🔹 BE 요약 응답 DTO랑 1:1로 맞추기
+/* Summary는 안 쓰지만 그대로 둬도 됨 */
 export interface VCenterSummary {
   totalVms: number;
   poweredOn: number;
@@ -16,31 +16,53 @@ export interface VCenterSummary {
   unknown: number;
 }
 
-// 🔹 VM 리스트 DTO
-export interface VCenterVm {
-  vmId: string;
+/* vCenter + DB 공용 VM DTO */
+export interface LiveVcenterVm {
+  vmId?: string | null;   // 지금은 안 쓰더라도 남겨둠
+
   name: string;
   powerState: string;
-  cpuCount: number;
-  memorySizeMiB: number;
+
+  cpuCores: number | null;
+  memoryGb: number | null;
+  diskGb: number | null;
+
+  alarmStatus: string;
+
+  teamId?: number | null;
+  teamName?: string | null;
+  clusterName?: string | null;
+  //createdAt?: string | null;
 }
 
 export const vcenterApi = {
-  // ✅ teamId 옵션 추가
-  getAllVms: async (teamId?: number) => {
-    const res = await apiClient.get<ApiResponse<VCenterVm[]>>(
-      "/monitor/vcenter/vms",
-      teamId != null ? { params: { teamId } } : undefined,
+  async getSummary() {
+    const res = await apiClient.get<ApiResponse<VCenterSummary>>(
+      "/monitoring/prometheus/summary"
     );
-    return res.data; // { success, data, message }
+    return res.data;
   },
 
-  // ✅ teamId 옵션 추가
-  getSummary: async (teamId?: number) => {
-    const res = await apiClient.get<ApiResponse<VCenterSummary>>(
-      "/monitor/vcenter/summary",
-      teamId != null ? { params: { teamId } } : undefined,
+  /** ✅ 우리 팀 기준 vCenter VM (실시간 + DB매핑) */
+  async getTeamVms(teamId?: number) {
+    const res = await apiClient.get<ApiResponse<LiveVcenterVm[]>>(
+      "/monitor/vcenter/vms",
+      teamId != null
+        ? {
+            params: { teamId },
+          }
+        : undefined
     );
-    return res.data; // { success, data, message }
+    return res.data;
+  },
+
+  /** 원하면 남겨두는 실시간 raw */
+  export const vcenterApi = {
+  async getLiveVms(teamId?: number) {
+    const res = await apiClient.get<ApiResponse<LiveVcenterVm[]>>(
+      "/monitor/vcenter/live-vms",
+      teamId != null ? { params: { teamId } } : undefined
+    );
+    return res.data;
   },
 };

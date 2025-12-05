@@ -77,6 +77,11 @@ interface PageResponse<T> {
   hasNext: boolean;
 }
 
+// ⭐ VM 이름 중복 체크 응답 타입
+interface VmNameCheckResult {
+  duplicate: boolean;
+}
+
 const TEMPLATE_NAME_MAP: Record<string, string> = {
   "ROCKY-LINUX": "/ce5-3/vm/Discovered virtual machine/rockylinux-template",
 };
@@ -88,6 +93,11 @@ function CreateVMPageInner() {
   const router = useRouter();
   const [errors, setErrors] = useState<FormErrors>({});
   const [vmName, setVmName] = useState("");
+
+  // ⭐ VM 이름 중복 관련 state
+  const [vmNameError, setVmNameError] = useState<string | null>(null);
+  const [isCheckingVmName, setIsCheckingVmName] = useState(false);
+
   const [storage, setStorage] = useState("");
   const [cpu, setCpu] = useState("");
   const [memory, setMemory] = useState("");
@@ -168,6 +178,57 @@ function CreateVMPageInner() {
     return undefined;
   };
 
+  /** ⭐ VM 이름 실시간 중복 체크 (디바운스) */
+  useEffect(() => {
+    // 비어 있으면 에러 초기화
+    if (!vmName.trim()) {
+      setVmNameError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        setIsCheckingVmName(true);
+
+        const finalTeamId = resolveTeamId();
+
+        const res = await apiClient.get<ApiResponse<VmNameCheckResult>>(
+          "/vms/name-check",
+          {
+            params: {
+              name: vmName,
+              teamId: finalTeamId,
+            },
+          }
+        );
+
+        if (cancelled) return;
+
+        const duplicate = res.data?.data?.duplicate;
+
+        if (duplicate) {
+          setVmNameError("중복된 VM 이름입니다.");
+        } else {
+          setVmNameError(null);
+        }
+      } catch (err) {
+        console.error("[CreateVM] VM 이름 중복 체크 실패:", err);
+        // 에러 시에는 조용히 넘어가도 됨 (서버 오류 때문에 이름 사용을 막고 싶지 않으면)
+      } finally {
+        if (!cancelled) {
+          setIsCheckingVmName(false);
+        }
+      }
+    }, 400); // 0.4초 디바운스
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [vmName, userRole, selectedTeamId, authTeamId]);
+
   /** 제출 처리 */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,6 +236,12 @@ function CreateVMPageInner() {
 
     if (!vmName.trim() || !cpu || !memory || !storage || !os) {
       newErrors.general = "선택하지 않은 옵션이 있습니다.";
+    }
+
+    // ⭐ 이름 중복 에러가 있는 경우도 막기
+    if (vmNameError) {
+      newErrors.general =
+        "VM 이름이 이미 사용 중입니다. 다른 이름으로 입력해주세요.";
     }
 
     const memoryValue = Number.parseInt(memory, 10);
@@ -356,6 +423,7 @@ function CreateVMPageInner() {
 
   const applySpec = (spec: VMSpec) => {
     setVmName(spec.name + "-copy");
+    setVmNameError(null); // ⭐ 기존 에러 초기화
     setErrors({});
     setCpu(spec.cpu || "");
     setMemory(spec.memory || "");
@@ -427,7 +495,22 @@ function CreateVMPageInner() {
                       placeholder="예: production-server-01"
                       value={vmName}
                       onChange={(e) => setVmName(e.target.value)}
+                      className={
+                        vmNameError
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : ""
+                      }
                     />
+                    {vmNameError && (
+                      <p className="text-sm text-destructive flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" /> {vmNameError}
+                      </p>
+                    )}
+                    {isCheckingVmName && !vmNameError && vmName.trim() && (
+                      <p className="text-xs text-muted-foreground">
+                        이름 중복 여부 확인 중...
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -607,5 +690,3 @@ export default function CreateVMPage() {
     </Suspense>
   );
 }
-
-

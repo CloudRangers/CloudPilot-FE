@@ -59,6 +59,8 @@ function CreatingVMContent() {
     setCurrentIndex(0);
   }, [rawJobIds, singleJobIdParam]);
 
+  // ... 위쪽 코드는 그대로 두고
+
   useEffect(() => {
     if (!currentJobId) {
       setStatus("FAILED");
@@ -90,8 +92,21 @@ function CreatingVMContent() {
 
     const es = new EventSource(`${apiBaseUrl}/sse/provision/${currentJobId}`);
 
+    // ✅ progress 이벤트: JSON.parse 안전하게
     const handleProgress = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as ProvisionProgressPayload;
+      let data: ProvisionProgressPayload | null = null;
+
+      try {
+        data = JSON.parse(event.data) as ProvisionProgressPayload;
+      } catch (e) {
+        console.warn(
+          "[CreatingVM] progress 이벤트 JSON 파싱 실패, raw data =",
+          event.data,
+          e
+        );
+        // JSON이 아니면 그냥 무시 (바 UI만 안깨지게)
+        return;
+      }
 
       if (typeof data.progress === "number") {
         setProgress(data.progress);
@@ -104,12 +119,31 @@ function CreatingVMContent() {
       }
     };
 
+    // ✅ complete 이벤트: JSON.parse 안전하게
     const handleComplete = (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as ProvisionProgressPayload;
+      let data: ProvisionProgressPayload | null = null;
 
-      setProgress(typeof data.progress === "number" ? data.progress : 100);
-      if (data.description) {
-        setDescription(data.description);
+      try {
+        data = JSON.parse(event.data) as ProvisionProgressPayload;
+      } catch (e) {
+        console.warn(
+          "[CreatingVM] complete 이벤트 JSON 파싱 실패, raw data =",
+          event.data,
+          e
+        );
+        // 마지막 complete인데 JSON이 아니면 그냥 100% 처리 + generic 메시지
+        setProgress(100);
+        setDescription("가상머신 생성이 완료되었습니다.");
+        setStatus("SUCCEEDED");
+      }
+
+      if (data) {
+        setProgress(
+          typeof data.progress === "number" ? data.progress : 100
+        );
+        if (data.description) {
+          setDescription(data.description);
+        }
       }
 
       // 아직 남은 VM이 있다면 다음 job으로 넘어감
@@ -141,19 +175,25 @@ function CreatingVMContent() {
       }, 500);
     };
 
-    // 서버에서 name("error")로 보낸 이벤트 처리
+    // ✅ 서버에서 name("error")로 보낸 이벤트 처리 + vm-failed 연동
     const handleProvisionErrorEvent = (event: Event) => {
       const msgEvent = event as MessageEvent;
+      let payload: any | null = null;
 
       if (msgEvent.data) {
         try {
-          const data = JSON.parse(msgEvent.data) as ProvisionProgressPayload;
-          if (data.description) {
-            setDescription(data.description);
+          payload = JSON.parse(msgEvent.data);
+          if (payload.description) {
+            setDescription(payload.description);
           } else {
             setDescription("가상머신 생성 중 오류가 발생했습니다.");
           }
-        } catch {
+        } catch (e) {
+          console.warn(
+            "[CreatingVM] error 이벤트 JSON 파싱 실패, raw data =",
+            msgEvent.data,
+            e
+          );
           setDescription("가상머신 생성 중 알 수 없는 오류가 발생했습니다.");
         }
       } else {
@@ -161,11 +201,24 @@ function CreatingVMContent() {
       }
 
       setStatus("FAILED");
-      // 실패 시에도 진행률 바를 끝까지 채워주고 싶으면 100으로 고정
+      // 실패 시에도 진행률 바를 끝까지 채우고 싶으면 100으로
       setProgress((prev) => (prev > 0 ? prev : 100));
 
       es.close();
       console.warn("[CreatingVM] SSE error 이벤트 수신, 연결 종료");
+
+      // 🔥 vm-failed에서 볼 수 있게 lastProvisionResult 저장
+      if (payload) {
+        try {
+          localStorage.setItem("lastProvisionResult", JSON.stringify(payload));
+        } catch {
+          // localStorage 실패해도 앱이 죽진 않게 무시
+        }
+      }
+
+      // 🔥 실패 페이지로 라우팅
+      const nextJobId = currentJobId;
+      router.replace(nextJobId ? `/vm-failed?jobId=${nextJobId}` : "/vm-failed");
     };
 
     es.addEventListener("progress", handleProgress);
@@ -187,6 +240,7 @@ function CreatingVMContent() {
       es.close();
     };
   }, [currentJobId, currentIndex, totalCount, batchId, router]);
+
 
   if (totalCount === 0) {
     return (

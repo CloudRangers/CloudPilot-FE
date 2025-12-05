@@ -1,7 +1,7 @@
 // app/admin/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { Header } from "@/components/header";
@@ -15,8 +15,9 @@ import { PrometheusMonitoring } from "@/components/prometheus-monitoring";
 import { GrafanaEmbed } from "@/components/grafana-embed";
 
 import { VCenterSummaryCards } from "@/components/vcenter-summary-cards";
-import { VCenterVmTable } from "@/components/vcenter-vm-table";
 import { DatastoreSummaryCards } from "@/components/datastore-summary-cards";
+import { PrometheusSummaryCards } from "@/components/prometheus-summary-cards";
+
 
 import { opsApi } from "@/lib/api/ops";
 import type { AnomalyDetectionResultDto } from "@/lib/api/ops";
@@ -89,6 +90,12 @@ export default function AdminPage() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
 
+   // ✅ Prometheus Monitoring 섹션 스크롤용 ref
+  const metricsSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ 대시보드 튜토리얼 모달 상태
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+
   // vCenter VM 상세 모달용
   const [selectedVcenterVm, setSelectedVcenterVm] =
     useState<VCenterVmApiVm | null>(null);
@@ -150,71 +157,83 @@ export default function AdminPage() {
     load();
   }, []);
 
+  // 🔽 상단 Summary → 아래 Prometheus Monitoring 섹션으로 스크롤
+  const handleScrollToMonitoring = () => {
+    metricsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+
   // --- vCenter VM 실데이터 로딩 (이슈 VM 섹션용)
-  useEffect(() => {
-    const fetchVcenterVms = async () => {
-      try {
-        setVcenterLoading(true);
-        setVcenterError(null);
+  // app/admin/page.tsx - vcenterVms 로딩 useEffect 부분
+useEffect(() => {
+  const fetchVcenterVms = async () => {
+    try {
+      setVcenterLoading(true);
+      setVcenterError(null);
 
-        const res = await apiClient.get<
-          ApiResponse<IssueVCenterVm[] | { items: IssueVCenterVm[] }>
-        >("/monitor/vcenter/vms");
+      const teamIdStr = localStorage.getItem("teamId");
+      const teamId = teamIdStr ? Number(teamIdStr) : undefined;
 
-        const body = res.data;
+      const res = await apiClient.get<ApiResponse<IssueVCenterVm[]>>(
+        "/monitor/vcenter/vms",
+        teamId != null
+          ? {
+              params: { teamId },
+            }
+          : undefined
+      );
 
-        console.log("[Admin] /monitor/vcenter/vms raw 응답:", body);
+      const body = res.data;
 
-        if (!body.success || !body.data) {
-          setVcenterError(
-            body.message ?? "vCenter VM 목록을 불러오지 못했습니다."
-          );
-          setVcenterVms([]);
-          return;
-        }
+      console.log("[Admin] /monitor/vcenter/vms raw 응답:", body);
 
-        const payload = body.data;
-        let items: IssueVCenterVm[] = Array.isArray(payload)
-          ? payload
-          : payload.items ?? [];
-
-        // 🔹 팀 필터
-        const teamIdStr = localStorage.getItem("teamId");
-        if (teamIdStr) {
-          const myTeamId = Number(teamIdStr);
-          items = items.filter(
-            (vm) => vm.teamId != null && Number(vm.teamId) === myTeamId
-          );
-        }
-
-        // 🔹 이슈 VM을 상단으로 올리는 정렬
-        items = items.sort((a, b) => {
-          const aIssue =
-            a.powerState === "POWERED_OFF" || a.alarmStatus !== "OK";
-          const bIssue =
-            b.powerState === "POWERED_OFF" || b.alarmStatus !== "OK";
-
-          if (aIssue === bIssue) return 0;
-          return aIssue ? -1 : 1;
-        });
-
-        setVcenterVms(items);
-      } catch (e: unknown) {
-        console.warn("failed to load vCenter vms", e);
-        const err = e as any;
-        const msgFromServer =
-          err?.response?.data?.message ??
-          (err?.response?.status === 401
-            ? "vCenter VM 목록을 보기 위해 로그인이 필요합니다."
-            : "vCenter VM 목록을 불러오지 못했습니다.");
-        setVcenterError(msgFromServer);
-      } finally {
-        setVcenterLoading(false);
+      if (!body.success || !body.data) {
+        setVcenterError(
+          body.message ?? "vCenter VM 목록을 불러오지 못했습니다."
+        );
+        setVcenterVms([]);
+        return;
       }
-    };
 
-    fetchVcenterVms();
-  }, []);
+      let items: IssueVCenterVm[] = body.data;
+
+      // 👉 BE에서 이미 teamId로 필터한 상태라면, 이 2차 필터는 사실상 백업용
+      if (teamId != null) {
+        items = items.filter(
+          (vm) => vm.teamId != null && Number(vm.teamId) === teamId
+        );
+      }
+
+      items = items.sort((a, b) => {
+        const aIssue =
+          a.powerState === "POWERED_OFF" || a.alarmStatus !== "OK";
+        const bIssue =
+          b.powerState === "POWERED_OFF" || b.alarmStatus !== "OK";
+
+        if (aIssue === bIssue) return 0;
+        return aIssue ? -1 : 1;
+      });
+
+      setVcenterVms(items);
+    } catch (e: unknown) {
+      console.warn("failed to load vCenter vms", e);
+      const err = e as any;
+      const msgFromServer =
+        err?.response?.data?.message ??
+        (err?.response?.status === 401
+          ? "vCenter VM 목록을 보기 위해 로그인이 필요합니다."
+          : "vCenter VM 목록을 불러오지 못했습니다.");
+      setVcenterError(msgFromServer);
+    } finally {
+      setVcenterLoading(false);
+    }
+  };
+
+  fetchVcenterVms();
+}, []);
 
   // 이슈 VM 필터링 (DOWN이거나 알람이 OK가 아닌 경우)
   const issueVms = vcenterVms.filter(
@@ -296,15 +315,28 @@ export default function AdminPage() {
       <main className="flex-1">
         <section className="container px-4 py-12 md:px-6">
           {/* 페이지 타이틀 */}
-          <div className="mb-8">
-            <h1 className="mb-2 text-4xl font-bold">관리자 대시보드</h1>
-            <p className="text-muted-foreground">
-              vCenter + Prometheus 기반 실시간 리소스 현황 및 VM 모니터링
-            </p>
+                    <div className="mb-8 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="mb-2 text-4xl font-bold">관리자 대시보드</h1>
+              <p className="text-muted-foreground">
+                vCenter + Prometheus 기반 실시간 리소스 현황 및 VM 모니터링
+              </p>
+            </div>
+
+            {/* ❓ 대시보드 튜토리얼 버튼 */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="mt-1 h-8 w-8 rounded-full text-xs"
+              onClick={() => setIsGuideOpen(true)}
+            >
+              ?
+            </Button>
           </div>
 
-          {/* vCenter Summary 카드 */}
-          <VCenterSummaryCards />
+          {/* 🔹 Prometheus up() Summary 카드 (클릭 시 아래 모니터링 섹션으로 이동) */}
+          <PrometheusSummaryCards onClickGoToMetrics={handleScrollToMonitoring} />
+
 
           {/* 🔹 Datastore 요약 카드 */}
           <DatastoreSummaryCards />
@@ -388,41 +420,7 @@ export default function AdminPage() {
                     </div>
                   </Card>
 
-                  {/* 평균 응답 시간 */}
-                  <Card className="flex flex-col gap-2 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        평균 응답 시간
-                      </span>
-                      <Network className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="text-2xl font-bold">
-                      {overview.avgResponseValid
-                        ? `${overview.avgResponseMs} ms`
-                        : "N/A"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Prometheus 기반 최근 구간 평균
-                    </div>
-                  </Card>
-
-                  {/* 에러 발생 수 */}
-                  <Card className="flex flex-col gap-2 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        최근 24시간 에러 수
-                      </span>
-                      <AlertTriangle className="h-4 w-4 text-destructive" />
-                    </div>
-                    <div className="text-2xl font-bold text-destructive">
-                      {overview.errorCountValid
-                        ? overview.errorCount24h.toLocaleString("ko-KR")
-                        : "N/A"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      어플리케이션 / 인프라 에러 집계
-                    </div>
-                  </Card>
+                  
                 </div>
               </>
             )}
@@ -488,32 +486,16 @@ export default function AdminPage() {
           </div>
 
           {/* Prometheus / Grafana 탭 */}
-          <Card className="mt-8 p-6">
-            <h2 className="mb-2 text-2xl font-bold">리소스 모니터링</h2>
-            <p className="mb-6 text-sm text-muted-foreground">
-              Prometheus 메트릭 기반 차트와 Grafana 대시보드를 한 화면에서
-              전환하며 확인할 수 있습니다.
-            </p>
-
             <Tabs defaultValue="prometheus" className="space-y-6">
-              <TabsList className="grid w-full max-w-md grid-cols-2">
-                <TabsTrigger value="prometheus">
-                  Prometheus + Recharts
-                </TabsTrigger>
-                <TabsTrigger value="grafana">Grafana 임베드</TabsTrigger>
-              </TabsList>
-
               <TabsContent value="prometheus">
                 <PrometheusMonitoring />
               </TabsContent>
-
               <TabsContent value="grafana">
                 <GrafanaEmbed />
               </TabsContent>
             </Tabs>
-          </Card>
 
-          {/* vCenter VM 전체 목록 */}
+         {/* vCenter VM 전체 목록 (우리 팀 기준 필터) */}
           <Card className="mt-8 space-y-4 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">vCenter VM 리소스 현황</h2>
@@ -526,12 +508,104 @@ export default function AdminPage() {
               </Button>
             </div>
 
-            <VCenterVmTable onVmClick={handleVcenterVmClick} />
+            {vcenterLoading && (
+              <p className="text-sm text-muted-foreground">
+                vCenter VM 목록을 불러오는 중입니다...
+              </p>
+            )}
+
+            {vcenterError && !vcenterLoading && (
+              <p className="text-sm text-red-500">{vcenterError}</p>
+            )}
+
+            {!vcenterLoading && !vcenterError && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="border-b bg-muted/40">
+                    <tr>
+                      <th className="px-3 py-2 text-left">VM 이름</th>
+                      <th className="px-3 py-2 text-left">클러스터</th>
+                      <th className="px-3 py-2 text-left">팀</th>
+                      <th className="px-3 py-2 text-right">vCPU</th>
+                      <th className="px-3 py-2 text-right">Memory(GB)</th>
+                      <th className="px-3 py-2 text-right">Disk(GB)</th>
+                      <th className="px-3 py-2 text-left">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vcenterVms.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="px-3 py-4 text-center text-xs text-muted-foreground"
+                        >
+                          현재 이 팀에 할당된 VM 이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      vcenterVms.map((vm) => (
+                        <tr
+                          key={vm.id}
+                          className="cursor-pointer border-b hover:bg-muted/40"
+                          onClick={() =>
+                            handleVcenterVmClick({
+                              vmId: String(vm.id),
+                              name: vm.name,
+                              powerState: vm.powerState,
+                              cpuCores: vm.cpuCores,
+                              memoryGb: vm.memoryGb,
+                              diskGb: vm.diskGb,
+                              alarmStatus: vm.alarmStatus,
+                            } as VCenterVmApiVm)
+                          }
+                        >
+                          <td className="px-3 py-2 align-middle font-medium">
+                            {vm.name}
+                          </td>
+                          <td className="px-3 py-2 align-middle text-xs text-muted-foreground">
+                            {vm.clusterName ?? "-"}
+                          </td>
+                          <td className="px-3 py-2 align-middle text-xs text-muted-foreground">
+                            {vm.teamName ?? "-"}
+                          </td>
+                          <td className="px-3 py-2 align-middle text-right">
+                            {vm.cpuCores}
+                          </td>
+                          <td className="px-3 py-2 align-middle text-right">
+                            {vm.memoryGb}
+                          </td>
+                          <td className="px-3 py-2 align-middle text-right">
+                            {vm.diskGb}
+                          </td>
+                          <td className="px-3 py-2 align-middle text-xs">
+                            <span
+                              className={
+                                vm.powerState === "POWERED_ON"
+                                  ? "rounded-full bg-emerald-50 px-2 py-1 font-medium text-emerald-600"
+                                  : "rounded-full bg-destructive/10 px-2 py-1 font-medium text-destructive"
+                              }
+                            >
+                              {vm.powerState === "POWERED_ON"
+                                ? "UP"
+                                : vm.powerState === "POWERED_OFF"
+                                ? "DOWN"
+                                : vm.powerState}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
+
         </section>
       </main>
 
       <Footer />
+
 
       {/* vCenter VM 상세 모달 */}
       <Dialog
@@ -558,31 +632,33 @@ export default function AdminPage() {
           </DialogHeader>
 
           {selectedVcenterVm && (
-            <div className="space-y-4 text-sm">
-              <Card className="space-y-1 p-4">
-                <p>
-                  <span className="font-medium">VM ID: </span>
-                  <span className="font-mono text-xs">
-                    {selectedVcenterVm.vmId}
-                  </span>
-                </p>
-                <p>
-                  <span className="font-medium">이름: </span>
-                  {selectedVcenterVm.name}
-                </p>
-                <p>
-                  <span className="font-medium">전원 상태: </span>
-                  {selectedVcenterVm.powerState}
-                </p>
-                <p>
-                  <span className="font-medium">vCPU: </span>
-                  {selectedVcenterVm.cpuCount}
-                </p>
-                <p>
-                  <span className="font-medium">메모리: </span>
-                  {formatMemoryGiB(selectedVcenterVm.memorySizeMiB)}
-                </p>
-              </Card>
+  <div className="space-y-4 text-sm">
+    <Card className="space-y-1 p-4">
+      <p>
+        <span className="font-medium">VM ID: </span>
+        <span className="font-mono text-xs">
+          {selectedVcenterVm.vmId}
+        </span>
+      </p>
+      <p>
+        <span className="font-medium">이름: </span>
+        {selectedVcenterVm.name}
+      </p>
+      <p>
+        <span className="font-medium">전원 상태: </span>
+        {selectedVcenterVm.powerState}
+      </p>
+      <p>
+        <span className="font-medium">vCPU: </span>
+        {selectedVcenterVm.cpuCores ?? "-"}
+      </p>
+      <p>
+        <span className="font-medium">메모리: </span>
+        {selectedVcenterVm.memoryGb != null
+          ? `${selectedVcenterVm.memoryGb} GB`
+          : "N/A"}
+      </p>
+    </Card>
 
               <div className="flex flex-wrap gap-2">
                 <Button

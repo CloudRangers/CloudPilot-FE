@@ -11,6 +11,15 @@ import { Badge } from "@/components/ui/badge";
 
 import { VCenterSummaryCards } from "@/components/vcenter-summary-cards";
 import { VCenterVmTable } from "@/components/vcenter-vm-table";
+// 상단 import에 추가
+import { DatastoreSummaryCards } from "@/components/datastore-summary-cards";
+
+
+// 🔹 추가: 공통 API 클라이언트 + 타입들
+import { apiClient } from "@/lib/api/base-client";
+import type { ApiResponse, MyPageData } from "@/types/mypage";
+import type { TeamLeaderMyPageData } from "@/types/mypage-leader";
+import type { HeadMyPageData } from "@/types/mypage-head";
 
 type RoleCode = "ADMIN" | "HEAD" | "LEADER" | "MEMBER" | null;
 
@@ -22,9 +31,9 @@ export default function VmStatusPage() {
   const [role, setRole] = useState<RoleCode>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [teamName, setTeamName] = useState<string | null>(null);
-  const [teamId, setTeamId] = useState<number | null>(null); // 🔹 숫자 teamId 상태 추가
+  const [teamId, setTeamId] = useState<number | null>(null);
 
-  // ✅ 로그인/역할 정보 localStorage에서 읽기
+  // ✅ 1차: localStorage 에서 로그인/역할/기본 정보 읽기
   useEffect(() => {
     try {
       const storedIsLoggedIn = localStorage.getItem("isLoggedIn") === "true";
@@ -34,7 +43,6 @@ export default function VmStatusPage() {
       const storedTeamId = localStorage.getItem("teamId");
 
       if (!storedIsLoggedIn || !storedRole) {
-        // 로그인 안 된 상태면 로그인 페이지로 보냄
         router.replace("/login");
         return;
       }
@@ -54,6 +62,64 @@ export default function VmStatusPage() {
     }
   }, [router]);
 
+  // ✅ 2차: 역할에 맞는 마이페이지 API를 호출해서 username / teamName / teamId 덮어쓰기
+  useEffect(() => {
+    if (!role) return;
+
+    const fetchProfile = async () => {
+      try {
+        // 팀장
+        if (role === "LEADER") {
+          const res = await apiClient.get<ApiResponse<TeamLeaderMyPageData>>(
+            "/mypage/leader",
+          );
+          const data = res.data.data;
+
+          setUsername((prev) => data.leaderName || prev);
+          setTeamName((prev) => data.teamName || prev);
+          // 🔹 teamId 는 현재 타입에 없으니, localStorage 값 그대로 사용
+          // 필요하면 백엔드에 teamId 추가 요청해서 여기서 setTeamId 해주면 됨
+
+          // 선택: localStorage도 같이 최신화
+          localStorage.setItem("username", data.leaderName || "");
+          localStorage.setItem("teamName", data.teamName || "");
+        }
+        // 팀원 / (또는 ADMIN, 공통 프로필 필요 시)
+        else if (role === "MEMBER" || role === "ADMIN") {
+          const res = await apiClient.get<ApiResponse<MyPageData>>("/mypage/me");
+          const data = res.data.data;
+
+          setUsername((prev) => data.username || prev);
+          setTeamName((prev) => data.teamName || prev);
+          setTeamId((prev) =>
+            typeof data.teamId === "number" ? data.teamId : prev,
+          );
+
+          localStorage.setItem("username", data.username || "");
+          localStorage.setItem("teamName", data.teamName || "");
+          if (data.teamId != null) {
+            localStorage.setItem("teamId", String(data.teamId));
+          }
+        }
+        // 부장
+        else if (role === "HEAD") {
+          const res = await apiClient.get<ApiResponse<HeadMyPageData>>(
+            "/mypage/head",
+          );
+          const data = res.data.data;
+
+          setUsername((prev) => data.managerName || prev);
+          // HEAD 는 여러 팀을 관리하니까 teamName 은 별도로 쓰지 않고 범위 문구에서 설명
+          localStorage.setItem("username", data.managerName || "");
+        }
+      } catch (err) {
+        console.error("[VmStatus] 사용자/팀 정보 조회 실패:", err);
+      }
+    };
+
+    fetchProfile();
+  }, [role]);
+
   if (initializing) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -65,7 +131,7 @@ export default function VmStatusPage() {
   }
 
   if (!isLoggedIn || !role) {
-    // 여기는 거의 안 타지만, 방어용
+    // 방어용
     return null;
   }
 
@@ -83,7 +149,7 @@ export default function VmStatusPage() {
   const effectiveTeamId: number | null =
     isAdmin || isHead ? null : teamId ?? null;
 
-  // 👉 역할별로 화면 설명/범위 문구 다르게
+  // 👉 역할별 설명 문구
   const scopeText =
     role === "HEAD"
       ? "여러 팀의 인프라 리소스를 한 번에 보는 부장용 대시보드입니다."
@@ -93,6 +159,7 @@ export default function VmStatusPage() {
       ? "내가 속한 팀의 리소스 현황을 조회하는 팀원용 대시보드입니다."
       : "역할 정보가 올바르지 않습니다.";
 
+  // 👉 표시 범위 문구
   const rangeText =
     role === "HEAD"
       ? "표시 범위: 내가 관리하는 모든 팀 (현재는 전체 vCenter 기준 데이터 또는 통합 데이터)"
@@ -106,7 +173,7 @@ export default function VmStatusPage() {
         }`
       : "";
 
-  const showVmTable = role === "HEAD" || role === "LEADER"; // 👉 팀원은 Summary만
+  const showVmTable = role === "HEAD" || role === "LEADER"; // 팀원은 Summary만
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -139,7 +206,7 @@ export default function VmStatusPage() {
                   {roleLabel[role] ?? role}
                 </Badge>
               </div>
-              {teamName && (
+              {teamName && role !== "HEAD" && (
                 <p className="text-xs text-muted-foreground">
                   소속 팀: <span className="font-medium">{teamName}</span>
                 </p>
@@ -150,10 +217,13 @@ export default function VmStatusPage() {
             </div>
           </Card>
 
-          {/* ✅ vCenter Summary 카드: 모든 역할 공통으로 보여주되, teamId 기준 필터 가능 */}
-          <VCenterSummaryCards teamId={effectiveTeamId} />
+          {/* Summary 카드 */}
+          <VCenterSummaryCards />
 
-          {/* HEAD / LEADER 만 상세 VM 테이블 접근 가능 */}
+          {/* 🔹 공통 Datastore 요약 카드 (팀 구분 없이 vCenter 기준) */}
+          <DatastoreSummaryCards />
+
+          {/* HEAD / LEADER 만 상세 VM 테이블 */}
           {showVmTable ? (
             <Card className="p-6 mt-4 space-y-4">
               <div className="flex items-center justify-between">
@@ -169,8 +239,7 @@ export default function VmStatusPage() {
                 </div>
               </div>
 
-              {/* 🔹 teamId 기반 필터링된 VM + 메트릭 */}
-              <VCenterVmTable teamId={effectiveTeamId} />
+              <VCenterVmTable />
             </Card>
           ) : (
             <Card className="p-6 mt-4 space-y-3">
