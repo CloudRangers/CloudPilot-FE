@@ -10,10 +10,13 @@ async function tryRefreshToken(): Promise<boolean> {
 
   refreshPromise = (async () => {
     try {
-      const res = await fetch("/api/backend/auth/refresh", {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetch(
+  `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/refresh`,
+  {
+    method: "POST",
+    credentials: "include",
+  }
+);
 
       if (!res.ok) return false;
 
