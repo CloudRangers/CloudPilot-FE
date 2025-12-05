@@ -29,4 +29,6 @@ COPY --from=builder /app/public ./public
 
 EXPOSE 3000
 
+RUN npm install -g pm2
 CMD ["npm", "start"]
+
