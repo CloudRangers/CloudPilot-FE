@@ -125,7 +125,7 @@ export default function RequestPackagePage() {
                   패키지 신청
                 </h1>
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-lg text-muted-foreground">
                 필요한 패키지 정보를 입력하고 승인을 요청하세요
               </p>
             </div>
@@ -136,8 +136,8 @@ export default function RequestPackagePage() {
                 <Card className="border-2 border-primary/30 shadow-lg overflow-hidden">
                   <div className="border-b bg-muted/30 px-6 py-4 flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-semibold">패키지 목록</h2>
-                      <p className="text-sm text-muted-foreground">
+                      <h2 className="text-3xl font-semibold">패키지 목록</h2>
+                      <p className="text-base text-muted-foreground">
                         {packages.length}개의 패키지 신청
                       </p>
                     </div>
@@ -164,7 +164,7 @@ export default function RequestPackagePage() {
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
                               {index + 1}
                             </div>
-                            <h3 className="text-lg font-semibold">
+                            <h3 className="text-xl font-semibold">
                               패키지 {index + 1}
                             </h3>
                           </div>
@@ -184,7 +184,7 @@ export default function RequestPackagePage() {
 
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <label className="text-sm font-medium flex items-center gap-2">
+                            <label className="text-base font-medium flex items-center gap-2">
                               패키지 이름
                               <span className="rounded bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">
                                 필수
@@ -202,7 +202,7 @@ export default function RequestPackagePage() {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">버전</label>
+                            <label className="text-base font-medium">버전</label>
                             <Input
                               placeholder="예: 1.0.0 (비우면 latest)"
                               value={pkg.version}
@@ -219,7 +219,7 @@ export default function RequestPackagePage() {
                           </div>
 
                           <div className="space-y-2">
-                            <label className="text-sm font-medium">
+                            <label className="text-base font-medium">
                               패키지 간단 사유
                             </label>
                             <Textarea
@@ -243,8 +243,8 @@ export default function RequestPackagePage() {
               <div className="space-y-4">
                 <Card className="border-2 shadow-lg">
                   <div className="border-b bg-muted/30 px-6 py-4">
-                    <h3 className="font-semibold">승인 담당자</h3>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <h3 className="font-semibold text-xl">승인 담당자</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
                       2단계 승인 프로세스 (팀장 → 부장)
                     </p>
                   </div>
@@ -255,7 +255,7 @@ export default function RequestPackagePage() {
                         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-bold text-muted-foreground">
                           1
                         </div>
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                           1차 승인
                         </span>
                       </div>
@@ -268,7 +268,7 @@ export default function RequestPackagePage() {
                             <p className="font-medium text-foreground">
                               OO 팀장
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               1차 승인 담당
                             </p>
                           </div>
@@ -300,7 +300,7 @@ export default function RequestPackagePage() {
                         <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                           2
                         </div>
-                        <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                        <span className="text-sm font-semibold text-primary uppercase tracking-wide">
                           최종 승인
                         </span>
                       </div>
@@ -313,7 +313,7 @@ export default function RequestPackagePage() {
                             <p className="font-semibold text-foreground">
                               OO 부장
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               최종 승인 권한자
                             </p>
                           </div>
@@ -353,20 +353,7 @@ export default function RequestPackagePage() {
         </div>
       </main>
 
-      {/* 하단 floating 버튼 + CTA (선택사항) */}
-      <div className="container px-4 pb-8 md:px-6">
-        <div className="mx-auto max-w-6xl flex justify-end">
-          <Button
-            variant="outline"
-            size="icon"
-            type="button"
-            className="h-14 w-14 rounded-full border-2 bg-background shadow-xl hover:shadow-2xl hover:scale-110 transition-all relative group"
-          >
-            <MessageCircle className="h-6 w-6 text-primary" />
-            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary animate-pulse" />
-          </Button>
-        </div>
-      </div>
+      
 
       <Footer />
     </div>

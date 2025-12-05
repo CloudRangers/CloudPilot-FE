@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Progress } from "@/components/ui/progress";
+import { useSse } from "@/lib/context/SseContext";
 
-type ProvisionStatus = "RUNNING" | "SUCCEEDED" | "FAILED";
+type ProvisionStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "error";
 
 interface ProvisionProgressPayload {
   jobId: string;
@@ -29,6 +30,8 @@ function CreatingVMContent() {
   const rawJobIds = searchParams.get("jobIds");
   const singleJobIdParam = searchParams.get("jobId");
   const batchId = searchParams.get("batchId");
+
+  const { startSseConnection } = useSse();
 
   // 단일/배치 모두 지원: ?jobId=123 또는 ?jobIds=123,124
   const jobIds = useMemo<string[]>(() => {
@@ -58,8 +61,6 @@ function CreatingVMContent() {
   useEffect(() => {
     setCurrentIndex(0);
   }, [rawJobIds, singleJobIdParam]);
-
-  // ... 위쪽 코드는 그대로 두고
 
   useEffect(() => {
     if (!currentJobId) {
@@ -92,7 +93,10 @@ function CreatingVMContent() {
 
     const es = new EventSource(`${apiBaseUrl}/sse/provision/${currentJobId}`);
 
-    // ✅ progress 이벤트: JSON.parse 안전하게
+    // (옵션) 글로벌 SSE 컨텍스트도 같이 사용 중이면 호출
+    startSseConnection(currentJobId);
+
+    // ✅ progress 이벤트: JSON.parse 안전하게 + 실패 시 바로 vm-failed로 이동
     const handleProgress = (event: MessageEvent) => {
       let data: ProvisionProgressPayload | null = null;
 
@@ -104,7 +108,31 @@ function CreatingVMContent() {
           event.data,
           e
         );
-        // JSON이 아니면 그냥 무시 (바 UI만 안깨지게)
+        // JSON이 아니면 그냥 무시 (UI만 안 깨지게)
+        return;
+      }
+
+      if (!data) return;
+
+      // 실패 상태 감지 시 바로 실패 처리 + 라우팅
+      if (
+        data.status === "FAILED" ||
+        data.stage === "ERROR" ||
+        data.status === "error"
+      ) {
+        console.error("프로비저닝 실패 감지 (progress 이벤트):", data);
+
+        setStatus("FAILED");
+        setDescription(
+          data.description ?? "가상머신 생성 중 오류가 발생했습니다."
+        );
+        setProgress(100);
+        es.close();
+
+        setTimeout(() => {
+          router.push(`/vm-failed?jobId=${currentJobId}`);
+        }, 300);
+
         return;
       }
 
@@ -175,18 +203,17 @@ function CreatingVMContent() {
       }, 500);
     };
 
-    // ✅ 서버에서 name("error")로 보낸 이벤트 처리 + vm-failed 연동
+    // ✅ 서버에서 name("provision-error")로 보낸 이벤트 처리 + vm-failed 연동
     const handleProvisionErrorEvent = (event: Event) => {
       const msgEvent = event as MessageEvent;
       let payload: any | null = null;
+      let errorDescription = "가상머신 생성 중 오류가 발생했습니다.";
 
       if (msgEvent.data) {
         try {
           payload = JSON.parse(msgEvent.data);
           if (payload.description) {
-            setDescription(payload.description);
-          } else {
-            setDescription("가상머신 생성 중 오류가 발생했습니다.");
+            errorDescription = payload.description;
           }
         } catch (e) {
           console.warn(
@@ -194,12 +221,12 @@ function CreatingVMContent() {
             msgEvent.data,
             e
           );
-          setDescription("가상머신 생성 중 알 수 없는 오류가 발생했습니다.");
+          errorDescription =
+            "가상머신 생성 중 알 수 없는 오류가 발생했습니다.";
         }
-      } else {
-        setDescription("가상머신 생성 중 오류가 발생했습니다.");
       }
 
+      setDescription(errorDescription);
       setStatus("FAILED");
       // 실패 시에도 진행률 바를 끝까지 채우고 싶으면 100으로
       setProgress((prev) => (prev > 0 ? prev : 100));
@@ -207,7 +234,7 @@ function CreatingVMContent() {
       es.close();
       console.warn("[CreatingVM] SSE error 이벤트 수신, 연결 종료");
 
-      // 🔥 vm-failed에서 볼 수 있게 lastProvisionResult 저장
+      // 🔥 vm-failed에서 볼 수 있게 lastProvisionResult 저장 (payload가 있으면)
       if (payload) {
         try {
           localStorage.setItem("lastProvisionResult", JSON.stringify(payload));
@@ -216,14 +243,15 @@ function CreatingVMContent() {
         }
       }
 
-      // 🔥 실패 페이지로 라우팅
       const nextJobId = currentJobId;
-      router.replace(nextJobId ? `/vm-failed?jobId=${nextJobId}` : "/vm-failed");
+      router.replace(
+        nextJobId ? `/vm-failed?jobId=${nextJobId}` : "/vm-failed"
+      );
     };
 
     es.addEventListener("progress", handleProgress);
     es.addEventListener("complete", handleComplete);
-    es.addEventListener("error", handleProvisionErrorEvent);
+    es.addEventListener("provision-error", handleProvisionErrorEvent);
 
     es.onopen = () => {
       console.info("[CreatingVM] SSE 연결 성공:", currentJobId);
@@ -239,8 +267,14 @@ function CreatingVMContent() {
       console.log("[CreatingVM] SSE 연결 해제, jobId =", currentJobId);
       es.close();
     };
-  }, [currentJobId, currentIndex, totalCount, batchId, router]);
-
+  }, [
+    currentJobId,
+    currentIndex,
+    totalCount,
+    batchId,
+    router,
+    startSseConnection,
+  ]);
 
   if (totalCount === 0) {
     return (
@@ -249,7 +283,7 @@ function CreatingVMContent() {
           <h1 className="text-2xl font-bold tracking-tight">
             작업 정보를 찾을 수 없습니다
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             유효한 jobId 또는 jobIds 파라미터가 필요합니다.
           </p>
         </div>
@@ -261,12 +295,12 @@ function CreatingVMContent() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8 text-center">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">가상머신 생성 중</h1>
+          <h1 className="text-4xl font-bold tracking-tight">가상머신 생성 중</h1>
           <p className="text-muted-foreground">
             {isFailed ? "작업 중 오류가 발생했습니다." : "잠시만 기다려주세요..."}
           </p>
           {totalCount > 1 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               총 {totalCount}대 중 {currentIndex + 1}번째 VM 생성 중입니다.
             </p>
           )}
@@ -279,7 +313,7 @@ function CreatingVMContent() {
             className="absolute -top-8 transition-all duration-150 ease-linear"
             style={{ left: `${progress}%`, transform: "translateX(-50%)" }}
           >
-            <div className="text-4xl animate-bounce">
+            <div className="animate-bounce text-4xl">
               {isFailed ? "🙁" : "💻"}
             </div>
           </div>
@@ -287,7 +321,7 @@ function CreatingVMContent() {
 
         <div className="space-y-2">
           <p className="text-2xl font-semibold text-primary">{progress}%</p>
-          <p className="text-sm text-muted-foreground whitespace-pre-line">
+          <p className="whitespace-pre-line text-sm text-muted-foreground">
             {description}
           </p>
         </div>
@@ -300,12 +334,12 @@ export default function CreatingVMPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 -translate-y-[1cm]">
           <div className="w-full max-w-md space-y-4 text-center">
             <h1 className="text-2xl font-bold tracking-tight">
               가상머신 생성 화면 준비 중...
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-lg text-muted-foreground">
               잠시만 기다려 주세요.
             </p>
           </div>

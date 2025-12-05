@@ -382,13 +382,7 @@ export default function MemberMyPage() {
               <Card className="p-6 space-y-6">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-lg font-semibold">내 가상머신</h2>
-                  <Button
-                    onClick={() => {
-                      window.location.href = "/create-vm"
-                    }}
-                  >
-                    새 VM 생성
-                  </Button>
+                  
                 </div>
 
                 {vms.length === 0 ? (

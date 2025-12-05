@@ -16,11 +16,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+        
 
         stage('Node version check (Jenkins)') {
             steps {
@@ -29,27 +25,36 @@ pipeline {
             }
         }
 
-        stage('Install & Build (Jenkins)') {
-            steps {
-                sh '''
-                    rm -f package-lock.json
-                    npm install --force
-                    npm run build
-                '''
-            }
-            
-        }
+        
 
         stage('Push to ECR') {
             steps {
                 script {
+
+                    echo "📄 Reading .env.local ..."
+
+                    // .env.local 파일을 읽어서 Jenkins 환경변수로 설정
+                    def envMap = [:]
+                    def envFile = readFile("/var/jenkins_home/.env.local").split("\n")
+
+                    for (line in envFile) {
+                        if (line.contains("=")) {
+                            def (key, value) = line.split("=", 2)
+                            envMap[key.trim()] = value.trim()
+                        }
+                    }
+
+                    echo "🌍 API URL Loaded: ${envMap['NEXT_PUBLIC_API_BASE_URL']}"
+
                     sh """
                         echo "🔐 Logging in to ECR..."
                         aws ecr get-login-password --region ${AWS_DEFAULT_REGION} \
                             | docker login --username AWS --password-stdin ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
 
                         echo "🐳 Building FE Docker Image..."
-                        docker build -t cloudpilot/frontend:latest .
+                        docker build \
+                            --build-arg NEXT_PUBLIC_API_BASE_URL=${envMap['NEXT_PUBLIC_API_BASE_URL']} \
+                            -t cloudpilot/frontend:latest .
 
                         echo "🏷 Tagging Image..."
                         docker tag cloudpilot/frontend:latest ${ECR_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}

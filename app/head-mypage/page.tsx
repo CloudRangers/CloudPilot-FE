@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Package,
   AlertTriangle,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/base-client"
@@ -39,7 +40,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { useToast } from "@/hooks/use-toast"
 
 export default function HeadMyPage() {
   const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set())
@@ -49,6 +53,13 @@ export default function HeadMyPage() {
 
   const [selectedVm, setSelectedVm] = useState<MyPageVm | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+
+  // 🔹 삭제 모달 상태
+  const [deleteTargetVm, setDeleteTargetVm] = useState<MyPageVm | null>(null)
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const { toast } = useToast()
 
   const toggleServerDetails = (serverId: number) => {
     const next = new Set(expandedServers)
@@ -121,6 +132,21 @@ export default function HeadMyPage() {
     return value.replace("T", " ")
   }
 
+  const openGrafanaForVm = (vmName: string) => {
+    const base =
+      process.env.NEXT_PUBLIC_GRAFANA_BASE_URL ?? "http://172.16.5.68:3000"
+    const uid =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_UID ?? "vm-detail"
+    const slug =
+      process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_SLUG ?? "vm-detail"
+
+    const url = `${base}/d/${uid}/${slug}?var-instance=${encodeURIComponent(
+      vmName,
+    )}`
+
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
   /** VM에 연결된 할당 팀원 목록(팀장/팀원만) */
   const getAssignedMembersForVm = (vm: MyPageVm): VmAssignedMember[] => {
     const raw = vm.assignedMembers
@@ -141,6 +167,72 @@ export default function HeadMyPage() {
     const filtered = getAssignedMembersForVm(vm)
     return filtered.length > 0
   }
+
+  // 🔹 삭제 다이얼로그 열기
+  const openDeleteDialog = (vm: MyPageVm) => {
+    setDeleteTargetVm(vm)
+    setDeleteConfirmName("")
+  }
+
+  // 🔹 삭제 다이얼로그 닫기
+  const closeDeleteDialog = () => {
+    setDeleteTargetVm(null)
+    setDeleteConfirmName("")
+    setIsDeleting(false)
+  }
+
+  // 🔹 실제 삭제 처리
+  const handleDeleteVm = async () => {
+    if (!deleteTargetVm) return
+    if (deleteConfirmName.trim() !== deleteTargetVm.name) return
+
+    try {
+      setIsDeleting(true)
+
+      // 실제 삭제 API 호출
+      await apiClient.delete(`/vms/${deleteTargetVm.id}`)
+
+      // 프론트 상태에서도 제거
+      setData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          teams: prev.teams.map((team) => ({
+            ...team,
+            members: team.members.map((member) => ({
+              ...member,
+              servers: member.servers.filter((s) => s.id !== deleteTargetVm.id),
+            })),
+          })),
+        }
+      })
+
+      // 펼쳐진 상태에서도 제거 (깔끔하게)
+      setExpandedServers((prev) => {
+        const next = new Set(prev)
+        next.delete(deleteTargetVm.id)
+        return next
+      })
+
+      toast({
+        title: "VM 삭제 완료",
+        description: `'${deleteTargetVm.name}' VM이 삭제되었습니다.`,
+      })
+
+      closeDeleteDialog()
+    } catch (e) {
+      console.error("[HeadMyPage] VM 삭제 실패:", e)
+      toast({
+        variant: "destructive",
+        title: "VM 삭제 실패",
+        description: "VM 삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      })
+      setIsDeleting(false)
+    }
+  }
+
+  const isConfirmMatched =
+    deleteTargetVm && deleteConfirmName.trim() === deleteTargetVm.name
 
   // 🔄 로딩 상태
   if (loading) {
@@ -233,21 +325,23 @@ export default function HeadMyPage() {
         <div className="container px-4 py-8 md:px-6">
           {/* 상단 타이틀 + 요약 카드들 */}
           <div className="mb-6">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="mb-2 flex items-center gap-3">
               <div className="rounded-xl bg-primary/10 p-3">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
-              <h1 className="text-3xl font-bold tracking-tight">부장 마이페이지</h1>
+              <h1 className="text-3xl font-bold tracking-tight">
+                부장 마이페이지
+              </h1>
             </div>
             <p className="text-muted-foreground">
               모든 팀의 가상머신을 관리하고 패키지 승인을 처리하세요
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-4 mb-6">
+          <div className="mb-6 grid gap-6 lg:grid-cols-4">
             {/* 관리자 정보 */}
             <Card className="p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
                 <Shield className="h-5 w-5 text-primary" />
                 관리자 정보
               </h2>
@@ -273,7 +367,7 @@ export default function HeadMyPage() {
 
             {/* 전체 서버 수 */}
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="mb-2 flex items-center gap-3">
                 <div className="rounded-lg bg-blue-100 p-2">
                   <Server className="h-5 w-5 text-blue-600" />
                 </div>
@@ -286,7 +380,7 @@ export default function HeadMyPage() {
 
             {/* 실행 중 서버 수 */}
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="mb-2 flex items-center gap-3">
                 <div className="rounded-lg bg-green-100 p-2">
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
                 </div>
@@ -299,7 +393,7 @@ export default function HeadMyPage() {
 
             {/* 전체 팀원 수 */}
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="mb-2 flex items-center gap-3">
                 <div className="rounded-lg bg-purple-100 p-2">
                   <Users className="h-5 w-5 text-purple-600" />
                 </div>
@@ -316,7 +410,7 @@ export default function HeadMyPage() {
             <Link href="/head-approval">
               <Button
                 size="lg"
-                className="w-full md:w-auto gap-2 bg-green-600 hover:bg-green-700"
+                className="w-full gap-2 bg-green-600 hover:bg-green-700 md:w-auto"
               >
                 <CheckCircle className="h-5 w-5" />
                 패키지 승인 관리
@@ -327,7 +421,7 @@ export default function HeadMyPage() {
           {/* 🟥 팀원이 할당되지 않은 VM들 */}
           {unassignedVms.length > 0 && (
             <Card className="mb-6 border-destructive bg-destructive/5">
-              <div className="flex items-start gap-3 mb-3">
+              <div className="mb-3 flex items-start gap-3">
                 <div className="mt-1 rounded-full bg-destructive/10 p-2">
                   <AlertTriangle className="h-5 w-5 text-destructive" />
                 </div>
@@ -388,25 +482,31 @@ export default function HeadMyPage() {
               <AccordionItem
                 key={teamIndex}
                 value={`team-${teamIndex}`}
-                className="border-2 rounded-lg"
+                className="rounded-lg border-2"
               >
                 <Card className="border-0">
                   <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                    <div className="flex items-center justify-between w-full pr-4">
+                    <div className="flex w-full items-center justify-between pr-4">
                       <div className="flex items-center gap-3">
                         <Shield className="h-6 w-6 text-primary" />
                         <div className="text-left">
                           <h2 className="text-2xl font-bold">{team.teamName}</h2>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="mt-1 text-sm text-muted-foreground">
                             팀장: {team.teamLeader}
                           </p>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Badge variant="outline" className="text-base px-3 py-1">
+                        <Badge
+                          variant="outline"
+                          className="px-3 py-1 text-base"
+                        >
                           {team.members.length}명
                         </Badge>
-                        <Badge variant="secondary" className="text-base px-3 py-1">
+                        <Badge
+                          variant="secondary"
+                          className="px-3 py-1 text-base"
+                        >
                           {team.members.reduce(
                             (sum, member) => sum + member.servers.length,
                             0,
@@ -422,10 +522,10 @@ export default function HeadMyPage() {
                       {team.members.map((member, memberIndex) => (
                         <div
                           key={memberIndex}
-                          className="pl-4 border-l-2 border-muted"
+                          className="border-l-2 border-muted pl-4"
                         >
-                          <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                          <div className="mb-3 flex items-center justify-between">
+                            <h3 className="flex items-center gap-2 text-lg font-semibold">
                               <Users className="h-5 w-5 text-muted-foreground" />
                               {member.teamMember}
                             </h3>
@@ -440,15 +540,15 @@ export default function HeadMyPage() {
                               return (
                                 <div
                                   key={vm.id}
-                                  className="rounded-lg border border-border overflow-hidden"
+                                  className="overflow-hidden rounded-lg border border-border"
                                 >
                                   {/* 상단 요약 행 */}
                                   <div
-                                    className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                                    className="cursor-pointer p-4 transition-colors hover:bg-muted/50"
                                     onClick={() => toggleServerDetails(vm.id)}
                                   >
                                     <div className="flex items-start justify-between">
-                                      <div className="flex items-start gap-3 flex-1">
+                                      <div className="flex flex-1 items-start gap-3">
                                         <div className="rounded-md bg-primary/10 p-2">
                                           <Server className="h-5 w-5 text-primary" />
                                         </div>
@@ -457,7 +557,7 @@ export default function HeadMyPage() {
                                             <h4 className="font-semibold">
                                               {vm.name}
                                             </h4>
-                                            <span className="text-xs px-2 py-1 rounded-full bg-muted">
+                                            <span className="rounded-full bg-muted px-2 py-1 text-xs">
                                               {vm.type}
                                             </span>
                                           </div>
@@ -473,13 +573,18 @@ export default function HeadMyPage() {
                                             생성일: {formatDateTime(vm.createdAt)}
                                           </p>
 
-                                          {/* 요약 행에서도 담당자 한 줄 표시 (옵션) */}
+                                          {/* 요약 행에서도 담당자 한 줄 표시 */}
                                           <p className="text-xs text-muted-foreground">
                                             담당자:{" "}
                                             {assignedMembers.length > 0
-                                              ? `${assignedMembers
-                                                  .map((m) => m.name ?? m.username ?? "이름 없음")
-                                                  .join(", ")}`
+                                              ? assignedMembers
+                                                  .map(
+                                                    (m) =>
+                                                      m.name ??
+                                                      m.username ??
+                                                      "이름 없음",
+                                                  )
+                                                  .join(", ")
                                               : "할당된 팀원이 없습니다."}
                                           </p>
                                         </div>
@@ -503,14 +608,44 @@ export default function HeadMyPage() {
 
                                   {/* 펼친 상세 영역 */}
                                   {expandedServers.has(vm.id) && (
-                                    <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
-                                      <h5 className="font-semibold mb-3 flex items-center gap-2">
-                                        <Package className="h-4 w-4" />
-                                        상세 정보
-                                      </h5>
+                                    <div className="border-t bg-muted/30 px-4 pb-4 pt-2">
+                                      <div className="mb-3 flex items-center justify-between">
+                                        <h5 className="flex items-center gap-2 font-semibold">
+                                          <Package className="h-4 w-4" />
+                                          상세 정보
+                                        </h5>
+
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setSelectedVm(vm)
+                                              setDetailOpen(true)
+                                            }}
+                                          >
+                                            Grafana 상세 모니터링
+                                          </Button>
+
+                                          <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            className="flex items-center gap-1"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              openDeleteDialog(vm)
+                                            }}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                            VM 삭제
+                                          </Button>
+                                        </div>
+                                      </div>
+
                                       <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div>
-                                          <p className="text-muted-foreground mb-1">
+                                          <p className="mb-1 text-muted-foreground">
                                             IP 주소
                                           </p>
                                           <p className="font-medium">
@@ -518,7 +653,7 @@ export default function HeadMyPage() {
                                           </p>
                                         </div>
                                         <div>
-                                          <p className="text-muted-foreground mb-1">
+                                          <p className="mb-1 text-muted-foreground">
                                             마지막 업데이트
                                           </p>
                                           <p className="font-medium">
@@ -528,7 +663,7 @@ export default function HeadMyPage() {
 
                                         {/* 할당된 팀원 정보 */}
                                         <div className="col-span-2">
-                                          <p className="text-muted-foreground mb-2">
+                                          <p className="mb-2 text-muted-foreground">
                                             할당된 팀원
                                           </p>
                                           {assignedMembers.length > 0 ? (
@@ -539,7 +674,9 @@ export default function HeadMyPage() {
                                                   variant="secondary"
                                                   className="text-xs"
                                                 >
-                                                  {m.name ?? m.username ?? "이름 없음"}
+                                                  {m.name ??
+                                                    m.username ??
+                                                    "이름 없음"}
                                                   {m.employeeId
                                                     ? ` (${m.employeeId})`
                                                     : ""}
@@ -554,11 +691,12 @@ export default function HeadMyPage() {
                                         </div>
 
                                         <div className="col-span-2">
-                                          <p className="text-muted-foreground mb-2">
+                                          <p className="mb-2 text-muted-foreground">
                                             설치된 패키지
                                           </p>
                                           <div className="flex flex-wrap gap-2">
-                                            {vm.packages && vm.packages.length > 0 ? (
+                                            {vm.packages &&
+                                            vm.packages.length > 0 ? (
                                               vm.packages.map((pkg, idx) => (
                                                 <Badge
                                                   key={idx}
@@ -576,8 +714,6 @@ export default function HeadMyPage() {
                                           </div>
                                         </div>
                                       </div>
-
-                                      {/* ⛔ Grafana 상세 모니터링 버튼 제거 */}
                                     </div>
                                   )}
                                 </div>
@@ -595,18 +731,24 @@ export default function HeadMyPage() {
         </div>
       </main>
 
-      {/* 🔹 Grafana 상세 모달 (버튼만 제거된 상태) */}
+      {/* 🔹 Grafana 상세 모달 */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {selectedVm ? `${selectedVm.name} 상세 모니터링` : "VM 상세"}
+              {selectedVm
+                ? `${selectedVm.name} 상세 모니터링`
+                : "VM 상세"}
             </DialogTitle>
+            <DialogDescription>
+              VM 스펙과 네트워크 정보를 확인하고 Grafana 대시보드로 이동할 수
+              있습니다.
+            </DialogDescription>
           </DialogHeader>
 
           {selectedVm && (
             <div className="space-y-4 text-sm">
-              <Card className="p-4 space-y-1">
+              <Card className="space-y-1 p-4">
                 <p>
                   <span className="font-medium">이름: </span>
                   {selectedVm.name}
@@ -640,8 +782,74 @@ export default function HeadMyPage() {
                   {formatDateTime(selectedVm.createdAt)}
                 </p>
               </Card>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openGrafanaForVm(selectedVm.name)}
+              >
+                Grafana 상세 대시보드 열기
+              </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 🔹 VM 삭제 확인 모달 */}
+      <Dialog
+        open={!!deleteTargetVm}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog()
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>VM 삭제</DialogTitle>
+            <DialogDescription>
+              {deleteTargetVm ? (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {deleteTargetVm.name}
+                  </span>{" "}
+                  VM을 정말로 삭제하시겠어요?
+                  <br />
+                  이 작업은 되돌릴 수 없습니다. 계속하려면 아래 입력란에 정확히{" "}
+                  <span className="font-mono text-foreground">
+                    {deleteTargetVm.name}
+                  </span>{" "}
+                  를 입력하세요.
+                </>
+              ) : (
+                "VM을 삭제하시겠습니까?"
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">VM 이름 확인</p>
+            <Input
+              placeholder={deleteTargetVm?.name ?? ""}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={isDeleting}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteVm}
+              disabled={!isConfirmMatched || isDeleting}
+            >
+              {isDeleting ? "삭제 중..." : "삭제하기"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

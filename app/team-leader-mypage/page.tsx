@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Package,
   AlertTriangle,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/base-client"
@@ -29,7 +30,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { useToast } from "@/hooks/use-toast"
 
 export default function TeamLeaderMyPage() {
   const [expandedServers, setExpandedServers] = useState<Set<number>>(new Set())
@@ -37,8 +41,12 @@ export default function TeamLeaderMyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [selectedVm, setSelectedVm] = useState<MyPageVm | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
+  // 🔹 삭제 모달용 상태
+  const [deleteTargetVm, setDeleteTargetVm] = useState<MyPageVm | null>(null)
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const { toast } = useToast()
 
   const toggleServerDetails = (serverId: number) => {
     const next = new Set(expandedServers)
@@ -59,7 +67,10 @@ export default function TeamLeaderMyPage() {
         console.log("[TeamLeaderMyPage] /mypage/leader 응답:", res.data)
         setData(res.data.data)
       } catch (err: any) {
-        console.error("[TeamLeaderMyPage] /mypage/leader 오류:", err?.response ?? err)
+        console.error(
+          "[TeamLeaderMyPage] /mypage/leader 오류:",
+          err?.response ?? err,
+        )
         setError("마이페이지 정보를 불러오지 못했습니다.")
       } finally {
         setLoading(false)
@@ -69,7 +80,7 @@ export default function TeamLeaderMyPage() {
     fetchLeaderMyPage()
   }, [])
 
-  // 상태 아이콘 / 텍스트 - 대문자 통일 처리 (RUNNING / running 둘 다 대응)
+  // 상태 아이콘 / 텍스트 - 대문자 통일 처리
   const getStatusIcon = (status: MyPageVm["status"]) => {
     const upper = (status ?? "").toString().toUpperCase()
     switch (upper) {
@@ -127,12 +138,67 @@ export default function TeamLeaderMyPage() {
     return filtered.length > 0
   }
 
+  // 🔹 삭제 다이얼로그 열기
+  const openDeleteDialog = (vm: MyPageVm) => {
+    setDeleteTargetVm(vm)
+    setDeleteConfirmName("")
+  }
+
+  // 🔹 삭제 다이얼로그 닫기
+  const closeDeleteDialog = () => {
+    setDeleteTargetVm(null)
+    setDeleteConfirmName("")
+    setIsDeleting(false)
+  }
+
+  // 🔹 실제 삭제 처리
+  const handleDeleteVm = async () => {
+    if (!deleteTargetVm) return
+    if (deleteConfirmName.trim() !== deleteTargetVm.name) return
+
+    try {
+      setIsDeleting(true)
+
+      await apiClient.delete(`/vms/${deleteTargetVm.id}`)
+
+      // 프론트 상태에서도 제거
+      setData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          members: prev.members.map((member) => ({
+            ...member,
+            servers: member.servers.filter((s) => s.id !== deleteTargetVm.id),
+          })),
+        }
+      })
+
+      toast({
+        title: "VM 삭제 완료",
+        description: `'${deleteTargetVm.name}' VM이 삭제되었습니다.`,
+      })
+
+      closeDeleteDialog()
+    } catch (e) {
+      console.error("[TeamLeaderMyPage] VM 삭제 실패:", e)
+      toast({
+        variant: "destructive",
+        title: "VM 삭제 실패",
+        description: "VM 삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      })
+      setIsDeleting(false)
+    }
+  }
+
+  const isConfirmMatched =
+    deleteTargetVm && deleteConfirmName.trim() === deleteTargetVm.name
+
   // 🔄 로딩 상태
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
         <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex flex-1 items-center justify-center">
           <p className="text-muted-foreground">
             🔄 마이페이지 정보를 불러오는 중입니다...
           </p>
@@ -147,7 +213,7 @@ export default function TeamLeaderMyPage() {
     return (
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-muted/20">
         <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex flex-1 items-center justify-center">
           <p className="text-destructive">
             {error ?? "마이페이지 정보를 불러오지 못했습니다."}
           </p>
@@ -181,7 +247,7 @@ export default function TeamLeaderMyPage() {
     0,
   )
 
-  // 🔻 "팀원이 할당되지 않은 VM" 수집 + 기존 리스트에서 분리
+  // 🔻 팀원이 할당되지 않은 VM 수집 + 기존 리스트에서 분리
   const unassignedVms: MyPageVm[] = []
   const membersForList = teamMembers
     .map((member) => {
@@ -194,7 +260,6 @@ export default function TeamLeaderMyPage() {
       })
       return { ...member, servers: assignedServers }
     })
-    // 모든 VM이 비어버린 멤버는 리스트에서 제거
     .filter((member) => member.servers.length > 0)
 
   return (
@@ -205,11 +270,13 @@ export default function TeamLeaderMyPage() {
         <div className="container px-4 py-8 md:px-6">
           {/* 상단 타이틀 + 요약 카드들 */}
           <div className="mb-6">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="mb-2 flex items-center gap-3">
               <div className="rounded-xl bg-primary/10 p-3">
                 <Users className="h-8 w-8 text-primary" />
               </div>
-              <h1 className="text-3xl font-bold tracking-tight">팀장 마이페이지</h1>
+              <h1 className="text-3xl font-bold tracking-tight">
+                팀장 마이페이지
+              </h1>
             </div>
             <p className="text-muted-foreground">
               내 팀의 가상머신 상태를 한눈에 보고, 팀 패키지 승인을 관리하세요.
@@ -218,7 +285,7 @@ export default function TeamLeaderMyPage() {
 
           <div className="mb-6 grid gap-6 lg:grid-cols-4">
             <Card className="p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
                 <Users className="h-5 w-5 text-primary" />
                 팀장 정보
               </h2>
@@ -245,24 +312,33 @@ export default function TeamLeaderMyPage() {
             </Card>
 
             <Card className="p-6">
-              <p className="text-sm text-muted-foreground mb-1">팀 전체 서버 수</p>
+              <p className="mb-1 text-sm text-muted-foreground">
+                팀 전체 서버 수
+              </p>
               <p className="text-2xl font-bold">{totalServers}</p>
             </Card>
 
             <Card className="p-6">
-              <p className="text-sm text-muted-foreground mb-1">실행 중 서버</p>
+              <p className="mb-1 text-sm text-muted-foreground">
+                실행 중 서버
+              </p>
               <p className="text-2xl font-bold">{runningServers}</p>
             </Card>
 
-            {/* 네 번째 칸은 비워두거나 나중에 다른 요약 카드 추가 가능 */}
+            {/* 네 번째 칸은 추후 다른 요약 카드용으로 비워둠 */}
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground">
+                추가 지표가 여기에 들어갈 수 있습니다.
+              </p>
+            </Card>
           </div>
 
-          {/* ✅ 패키지 승인 관리 버튼 */}
+          {/* ✅ 패키지 승인 관리 버튼 (상단 버전 유지) */}
           <div className="mb-6">
             <Link href="/leader-approval">
               <Button
                 size="lg"
-                className="w-full md:w-auto gap-2 bg-green-600 hover:bg-green-700"
+                className="w-full gap-2 bg-green-600 hover:bg-green-700 md:w-auto"
               >
                 <CheckCircle className="h-5 w-5" />
                 팀 패키지 승인 페이지
@@ -273,7 +349,7 @@ export default function TeamLeaderMyPage() {
           {/* 🟥 팀원이 할당되지 않은 VM들 */}
           {unassignedVms.length > 0 && (
             <Card className="mb-6 border-destructive bg-destructive/5">
-              <div className="flex items-start gap-3 mb-3">
+              <div className="mb-3 flex items-start gap-3">
                 <div className="mt-1 rounded-full bg-destructive/10 p-2">
                   <AlertTriangle className="h-5 w-5 text-destructive" />
                 </div>
@@ -328,16 +404,18 @@ export default function TeamLeaderMyPage() {
             </Card>
           )}
 
-          {/* 아래 VM 리스트 부분 */}
+          {/* 팀원별 VM 리스트 */}
           <div className="space-y-6">
             {membersForList.map((member, memberIndex) => (
               <Card key={memberIndex} className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="flex items-center gap-2 text-lg font-semibold">
                     <Users className="h-5 w-5 text-primary" />
                     {member.teamMember}
                   </h2>
-                  <Badge variant="outline">{member.servers.length}개 서버</Badge>
+                  <Badge variant="outline">
+                    {member.servers.length}개 서버
+                  </Badge>
                 </div>
 
                 <div className="space-y-4">
@@ -346,21 +424,22 @@ export default function TeamLeaderMyPage() {
                     return (
                       <div
                         key={vm.id}
-                        className="rounded-lg border border-border overflow-hidden"
+                        className="overflow-hidden rounded-lg border border-border"
                       >
+                        {/* 상단 요약 */}
                         <div
-                          className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                          className="cursor-pointer p-4 transition-colors hover:bg-muted/50"
                           onClick={() => toggleServerDetails(vm.id)}
                         >
                           <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3 flex-1">
+                            <div className="flex flex-1 items-start gap-3">
                               <div className="rounded-md bg-primary/10 p-2">
                                 <Server className="h-5 w-5 text-primary" />
                               </div>
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
                                   <h3 className="font-semibold">{vm.name}</h3>
-                                  <span className="text-xs px-2 py-1 rounded-full bg-muted">
+                                  <span className="rounded-full bg-muted px-2 py-1 text-xs">
                                     {vm.type}
                                   </span>
                                 </div>
@@ -404,15 +483,31 @@ export default function TeamLeaderMyPage() {
                           </div>
                         </div>
 
+                        {/* 펼친 상세 영역 */}
                         {expandedServers.has(vm.id) && (
-                          <div className="px-4 pb-4 pt-2 bg-muted/30 border-t">
-                            <h5 className="font-semibold mb-3 flex items-center gap-2">
-                              <Package className="h-4 w-4" />
-                              상세 정보
-                            </h5>
+                          <div className="border-t bg-muted/30 px-4 pb-4 pt-2">
+                            <div className="mb-3 flex items-center justify-between">
+                              <h5 className="flex items-center gap-2 font-semibold">
+                                <Package className="h-4 w-4" />
+                                상세 정보
+                              </h5>
+
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="flex items-center gap-1"
+                                  onClick={() => openDeleteDialog(vm)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  VM 삭제
+                                </Button>
+                              </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
-                                <p className="text-muted-foreground mb-1">
+                                <p className="mb-1 text-muted-foreground">
                                   IP 주소
                                 </p>
                                 <p className="font-medium">
@@ -420,7 +515,7 @@ export default function TeamLeaderMyPage() {
                                 </p>
                               </div>
                               <div>
-                                <p className="text-muted-foreground mb-1">
+                                <p className="mb-1 text-muted-foreground">
                                   마지막 업데이트
                                 </p>
                                 <p className="font-medium">
@@ -430,7 +525,7 @@ export default function TeamLeaderMyPage() {
 
                               {/* 할당된 팀원 정보 */}
                               <div className="col-span-2">
-                                <p className="text-muted-foreground mb-2">
+                                <p className="mb-2 text-muted-foreground">
                                   할당된 팀원
                                 </p>
                                 {assignedMembers.length > 0 ? (
@@ -441,7 +536,9 @@ export default function TeamLeaderMyPage() {
                                         variant="secondary"
                                         className="text-xs"
                                       >
-                                        {m.name ?? m.username ?? "이름 없음"}
+                                        {m.name ??
+                                          m.username ??
+                                          "이름 없음"}
                                         {m.employeeId
                                           ? ` (${m.employeeId})`
                                           : ""}
@@ -456,7 +553,7 @@ export default function TeamLeaderMyPage() {
                               </div>
 
                               <div className="col-span-2">
-                                <p className="text-muted-foreground mb-2">
+                                <p className="mb-2 text-muted-foreground">
                                   설치된 패키지
                                 </p>
                                 <div className="flex flex-wrap gap-2">
@@ -478,8 +575,6 @@ export default function TeamLeaderMyPage() {
                                 </div>
                               </div>
                             </div>
-
-                            {/* ⛔ Grafana 버튼 제거 (요청사항) */}
                           </div>
                         )}
                       </div>
@@ -492,56 +587,61 @@ export default function TeamLeaderMyPage() {
         </div>
       </main>
 
-      {/* 🔹 Grafana 상세 모달 (내부 내용만 유지, 버튼은 위에서 이미 제거됨) */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-xl">
+      {/* 🔹 VM 삭제 확인 모달 */}
+      <Dialog
+        open={!!deleteTargetVm}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog()
+        }}
+      >
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {selectedVm ? `${selectedVm.name} 상세 모니터링` : "VM 상세"}
-            </DialogTitle>
+            <DialogTitle>VM 삭제</DialogTitle>
             <DialogDescription>
-              VM 스펙과 네트워크 정보를 확인할 수 있습니다.
+              {deleteTargetVm ? (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {deleteTargetVm.name}
+                  </span>{" "}
+                  VM을 정말로 삭제하시겠어요?
+                  <br />
+                  이 작업은 되돌릴 수 없습니다. 계속하려면 아래 입력란에 정확히{" "}
+                  <span className="font-mono text-foreground">
+                    {deleteTargetVm.name}
+                  </span>{" "}
+                  를 입력하세요.
+                </>
+              ) : (
+                "VM을 삭제하시겠습니까?"
+              )}
             </DialogDescription>
           </DialogHeader>
 
-          {selectedVm && (
-            <div className="space-y-4 text-sm">
-              <Card className="p-4 space-y-1">
-                <p>
-                  <span className="font-medium">이름: </span>
-                  {selectedVm.name}
-                </p>
-                <p>
-                  <span className="font-medium">타입: </span>
-                  {selectedVm.type}
-                </p>
-                <p>
-                  <span className="font-medium">CPU: </span>
-                  {selectedVm.cpu ?? "-"} vCPU
-                </p>
-                <p>
-                  <span className="font-medium">메모리: </span>
-                  {selectedVm.memory ?? "-"} GB
-                </p>
-                <p>
-                  <span className="font-medium">스토리지: </span>
-                  {selectedVm.storage ?? "-"} GB
-                </p>
-                <p>
-                  <span className="font-medium">OS: </span>
-                  {selectedVm.os || "-"}
-                </p>
-                <p>
-                  <span className="font-medium">IP: </span>
-                  {selectedVm.ipAddress || "-"}
-                </p>
-                <p>
-                  <span className="font-medium">생성일: </span>
-                  {formatDateTime(selectedVm.createdAt)}
-                </p>
-              </Card>
-            </div>
-          )}
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">VM 이름 확인</p>
+            <Input
+              placeholder={deleteTargetVm?.name ?? ""}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={isDeleting}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteVm}
+              disabled={!isConfirmMatched || isDeleting}
+            >
+              {isDeleting ? "삭제 중..." : "삭제하기"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

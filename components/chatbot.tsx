@@ -1,13 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { MessageCircle, X, Send, AlertCircle } from "lucide-react"
+import { MessageCircle, X, AlertCircle } from "lucide-react"
 
 export interface ChatMessage {
-  text: string
-  isBot: boolean
+  text: string;
+  isBot: boolean;
 }
 
 interface ChatbotProps {
@@ -20,6 +19,13 @@ interface ChatbotProps {
 export function Chatbot({ messages, onSendMessage, hasError = false, onErrorChange }: ChatbotProps) {
   const [chatOpen, setChatOpen] = useState(false)
   const [chatMessage, setChatMessage] = useState("")
+
+  // ⭐ 에러 발생 시 챗봇 자동 오픈
+  useEffect(() => {
+    if (hasError) {
+      setChatOpen(true)
+    }
+  }, [hasError])
 
   const handleSendMessage = () => {
     if (chatMessage.trim()) {
@@ -84,3 +90,4 @@ export function Chatbot({ messages, onSendMessage, hasError = false, onErrorChan
     </>
   )
 }
+

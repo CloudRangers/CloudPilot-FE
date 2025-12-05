@@ -12,7 +12,7 @@ interface FeatureCardProps {
 
 export function FeatureCard({ title, description, icon: Icon, href }: FeatureCardProps) {
   return (
-    <Link href={href} className="group">
+    <Link href={href} className="group w-full max-w-lg">
       <Card className="h-full w-full transition-all hover:shadow-lg hover:border-primary/50">
         <CardHeader className="space-y-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
