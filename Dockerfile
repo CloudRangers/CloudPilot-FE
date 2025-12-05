@@ -1,5 +1,5 @@
 # 1) Build Stage
-FROM node:20-bullseye AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -11,15 +11,15 @@ COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
-RUN npm run build  
+RUN npm run build
 
 # 2) Run Stage
-FROM node:20-bullseye
+FROM node:20-alpine
+
 WORKDIR /app
 
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY package*.json ./
+COPY --from=builder /app .
 
 EXPOSE 3000
+
 CMD ["npm", "start"]
