@@ -17,9 +17,7 @@ RUN npm run build
 FROM node:20-bullseye
 WORKDIR /app
 
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY package*.json ./
+COPY --from=builder /app .
 
 EXPOSE 3000
 CMD ["npm", "start"]
