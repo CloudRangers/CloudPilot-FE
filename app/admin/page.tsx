@@ -404,87 +404,92 @@ export default function AdminPage() {
       console.log("[Admin SSE] raw event:", event.data);
 
       try {
-        // 🔹 빈/keep-alive 이벤트 무시
         if (!event.data) {
           console.log("[Admin SSE] empty event. ignore.");
           return;
         }
 
-        // 디버깅용: 타입까지 같이 찍기
-        console.log("[Admin SSE] event type:", (event as any).type);
-        console.log("[Admin SSE] raw event:", event.data);
+        let parsed = JSON.parse(event.data || "{}");
 
-        const parsed = JSON.parse(event.data || "{}");
-        const data = Array.isArray(parsed) ? (parsed[0] ?? {}) : parsed;
-
-        console.log("[Admin SSE] parsed data:", data);
-
-        let text = "";
-
-        // ✅ n8n → BE → SSE : { vmName, reason, actionRequired, additionalChecks }
-        if (data.vmName && (data.reason || data.actionRequired)) {
-          const vmName = data.vmName ?? "알 수 없는 VM";
-          const reason = data.reason ?? "";
-          const actionRequired = data.actionRequired ?? "";
-          const additionalChecks = data.additionalChecks ?? "";
-
-          const lines: string[] = [];
-          lines.push("🚨 vSphere 알람 분석 결과");
-          lines.push(`대상 VM: ${vmName}`);
-
-          if (reason) {
-            lines.push("");
-            lines.push(`상세 내용:\n${reason}`);
-          }
-          if (actionRequired) {
-            lines.push("");
-            lines.push(`조치 필요:\n${actionRequired}`);
-          }
-          if (additionalChecks) {
-            lines.push("");
-            lines.push(`추가 점검:\n${additionalChecks}`);
-          }
-
-          text = lines.join("\n");
-        } else {
-          // 🔙 기존 에러 포맷 fallback
-          const vmName =
-              data.vmName || data.vm || data.targetVm || "알 수 없는 VM";
-          const severity = data.severity || data.alarmStatus || "UNKNOWN";
-          const summary = data.aiSummary || data.summary || data.message || "";
-          const cause =
-              data.aiCause || data.cause || data.rootCause || "";
-          const solution =
-              data.aiSolution || data.solution || data.recommendation || "";
-
-          const lines: string[] = [];
-          lines.push(`🚨 vSphere 알람 감지 (${severity})`);
-          lines.push(`대상 VM: ${vmName}`);
-
-          if (summary) {
-            lines.push("");
-            lines.push(`요약: ${summary}`);
-          }
-          if (cause) {
-            lines.push("");
-            lines.push(`원인 추정: ${cause}`);
-          }
-          if (solution) {
-            lines.push("");
-            lines.push(`권장 조치: ${solution}`);
-          }
-
-          text = lines.join("\n");
+        // 배열이면 첫 번째 요소 추출
+        if (Array.isArray(parsed)) {
+          parsed = parsed[0] ?? {};
         }
 
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            text,
-            isBot: true,
-          },
-        ]);
-        setChatHasError(true);
+        // 문자열로 온 경우 다시 파싱
+        if (typeof parsed === "string") {
+          let str = parsed.trim();
+          if (str.startsWith("=")) {
+            str = str.substring(1);
+          }
+          try {
+            parsed = JSON.parse(str);
+          } catch {
+            // 파싱 실패 시 그대로 사용
+          }
+        }
+
+        console.log("[Admin SSE] parsed data:", parsed);
+
+        // 데이터가 비어있거나 message만 있는 경우 무시
+        if (!parsed || Object.keys(parsed).length === 0) {
+          console.log("[Admin SSE] empty data. ignore.");
+          return;
+        }
+
+        // EMPTY_BODY_FROM_N8N 메시지 무시
+        if (parsed.message === "EMPTY_BODY_FROM_N8N") {
+          console.log("[Admin SSE] empty body from n8n. ignore.");
+          return;
+        }
+
+        // ✅ 데이터 추출
+        const vmName = parsed.vmName ?? "알 수 없는 VM";
+        const eventType = parsed.eventType ?? "";
+        const reason = parsed.reason ?? "";
+        const actionRequired = parsed.actionRequired ?? "";
+        const additionalChecks = parsed.additionalChecks ?? "";
+
+        // ✅ 메시지 생성
+        const lines: string[] = [];
+        lines.push("🚨 vSphere 알람 분석 결과");
+
+        if (eventType) {
+          lines.push(`📌 유형: ${eventType}`);
+        }
+        lines.push(`🖥️ 대상 VM: ${vmName}`);
+
+        if (reason) {
+          lines.push("");
+          lines.push(`📋 상세 내용:`);
+          lines.push(reason);
+        }
+        if (actionRequired) {
+          lines.push("");
+          lines.push(`🔧 조치 필요:`);
+          lines.push(actionRequired);
+        }
+        if (additionalChecks) {
+          lines.push("");
+          lines.push(`🔍 추가 점검:`);
+          lines.push(additionalChecks);
+        }
+
+        const text = lines.join("\n");
+
+        console.log("[Admin SSE] Generated message:", text.substring(0, 100));
+
+        // ✅ 메시지가 있을 때만 추가
+        if (text && text.trim().length > 0) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              text,
+              isBot: true,
+            },
+          ]);
+          setChatHasError(true);
+        }
       } catch (e) {
         console.error("[Admin SSE] 메시지 파싱 실패", e, event.data);
       }
