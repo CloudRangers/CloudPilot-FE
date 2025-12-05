@@ -16,11 +16,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+        
 
         stage('Node version check (Jenkins)') {
             steps {
