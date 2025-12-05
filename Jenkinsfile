@@ -16,11 +16,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+        
 
         stage('Node version check (Jenkins)') {
             steps {
@@ -39,7 +35,7 @@ pipeline {
 
                     // .env.local 파일을 읽어서 Jenkins 환경변수로 설정
                     def envMap = [:]
-                    def envFile = readFile(".env.local").split("\n")
+                    def envFile = readFile("/var/jenkins_home/.env.local").split("\n")
 
                     for (line in envFile) {
                         if (line.contains("=")) {
